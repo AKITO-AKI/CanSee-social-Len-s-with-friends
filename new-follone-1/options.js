@@ -297,13 +297,6 @@
     btnPrompt: $('#btnPrompt'),
     btnWarmup: $('#btnWarmup'),
 
-    // settings mirror (Phase8 UI)
-    aiState2: $('#aiState2'),
-    aiSession2: $('#aiSession2'),
-    aiLatency2: $('#aiLatency2'),
-    btnPrompt2: $('#btnPrompt2'),
-    btnWarmup2: $('#btnWarmup2'),
-
     // next action
     nextText: $('#nextText'),
 
@@ -834,6 +827,17 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     return diffs.length ? diffs.join(' / ') : 'default';
   }
 
+  // Some parts of the UI (logs + compact views) still call this legacy name.
+  // Keep it as a stable wrapper to prevent init failures.
+  function updateDiffText() {
+    try {
+      if (dom && dom.diffText) dom.diffText.textContent = buildDiffText();
+      if (typeof updateGlance === 'function') updateGlance();
+    } catch (e) {
+      console.warn('[options] updateDiffText failed', e);
+    }
+  }
+
   function renderProgress() {
     const xp = Number(app.data.xp||0);
     const lv = Number(app.data.level||xpToLevel(xp));
@@ -1068,22 +1072,6 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     setTxt('devLatency', b.latency ?? '--');
     setTxt('devLastErr', b.lastError ?? '--');
 
-    // Home / Settings mirrors (keep user-facing panel in sync)
-    setTxt('aiState', b.state ?? 'unavailable');
-    setTxt('aiSession', b.session ?? '--');
-    setTxt('aiLatency', (b.latency===undefined||b.latency===null) ? '--' : String(b.latency));
-    setTxt('aiState2', b.state ?? 'unavailable');
-    setTxt('aiSession2', b.session ?? '--');
-    setTxt('aiLatency2', (b.latency===undefined||b.latency===null) ? '--' : String(b.latency));
-
-    // HOME/SETTINGS AI card (mirror)
-    if (dom.aiState) dom.aiState.textContent = b.state ?? 'unavailable';
-    if (dom.aiSession) dom.aiSession.textContent = b.session ?? '--';
-    if (dom.aiLatency) dom.aiLatency.textContent = (b.latency ?? '--') + (typeof b.latency === 'number' ? 'ms' : '');
-    if (dom.aiState2) dom.aiState2.textContent = b.state ?? 'unavailable';
-    if (dom.aiSession2) dom.aiSession2.textContent = b.session ?? '--';
-    if (dom.aiLatency2) dom.aiLatency2.textContent = (b.latency ?? '--') + (typeof b.latency === 'number' ? 'ms' : '');
-
     // reflect feature flags in both header and dev
     const f = app.data.master || {};
     const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
@@ -1157,7 +1145,6 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
 function bootPet() {
     const cvMain = document.getElementById('petCanvas');
     const cvSub  = document.getElementById('petCanvasSub');
-    const cvRpg  = document.getElementById('petCanvasRpg');
 
     const setNext = (t) => {
       const el = document.getElementById('nextText');
@@ -1203,13 +1190,11 @@ function bootPet() {
     try {
       P.engineMain = new PetEngine({ canvas: cvMain, debug: false, pixelSize: 1 });
       if (cvSub) P.engineSub = new PetEngine({ canvas: cvSub, debug: false, pixelSize: 1 });
-      if (cvRpg) P.engineRpg = new PetEngine({ canvas: cvRpg, debug: false, pixelSize: 1 });
     } catch (e) {
       console.warn('[HB] PetEngine ctor failed', e);
       setNext('PetEngine: init failed');
       drawFallback(cvMain, 'NO PET');
       drawFallback(cvSub, 'NO PET');
-      drawFallback(cvRpg, 'NO PET');
       return;
     }
 
@@ -1244,9 +1229,35 @@ function bootPet() {
     };
 
     // Animation state
+    // blink: scheduled
     P.nextBlinkAt = performance.now() + 1800 + Math.random()*1800;
     P.blinkUntil = 0;
-    P.talkUntil = 0;
+
+    // mouth / expression overrides (short-lived, event-driven)
+    // - used by TALK so the pet actually "lip-syncs" a little
+    P.mouthOverrideUntil = 0;
+    P.mouthVariant = 'idle';
+    P.mouthNextFlipAt = 0;
+    P.mouthFlipSeq = ['talk','o','dot'];
+    P.mouthFlipIdx = 0;
+
+    // eyes overrides (reserved; currently blink/normal only)
+    P.eyesOverrideUntil = 0;
+    P.eyesVariant = 'normal';
+
+    // Reaction entrypoint (safe to call even before load completes)
+    if (!P.react) {
+      P.react = (type) => {
+        const nowMs = performance.now();
+        if (type === 'talk') {
+          // 0.8-1.2s of mouth movement
+          const dur = 800 + Math.random() * 400;
+          P.mouthOverrideUntil = Math.max(P.mouthOverrideUntil || 0, nowMs + dur);
+          P.mouthNextFlipAt = nowMs;
+          P.mouthFlipIdx = (P.mouthFlipIdx + 1) % P.mouthFlipSeq.length;
+        }
+      };
+    }
 
     const tick = (t) => {
       if (P.stop) return;
@@ -1260,8 +1271,22 @@ function bootPet() {
         P.nextBlinkAt = now + 1800 + Math.random()*2200;
       }
 
-      const eyes = (now <= P.blinkUntil) ? 'blink' : 'normal';
-      const mouth = (now <= P.talkUntil) ? 'talk' : 'idle';
+      // Eyes: blink has priority unless an explicit override is active.
+      let eyes = (now <= P.blinkUntil) ? 'blink' : 'normal';
+      if (now <= (P.eyesOverrideUntil || 0) && P.eyesVariant) eyes = P.eyesVariant;
+
+      // Mouth: short override with simple "lip sync" flip.
+      let mouth = 'idle';
+      if (now <= (P.mouthOverrideUntil || 0)) {
+        if (now >= (P.mouthNextFlipAt || 0)) {
+          // Flip every ~90-140ms
+          const step = 90 + Math.random() * 50;
+          P.mouthNextFlipAt = now + step;
+          P.mouthFlipIdx = (P.mouthFlipIdx + 1) % P.mouthFlipSeq.length;
+          P.mouthVariant = P.mouthFlipSeq[P.mouthFlipIdx] || 'talk';
+        }
+        mouth = P.mouthVariant || 'talk';
+      }
 
       // Equipment from app state (if present)
       const headId = app?.data?.equippedHead || null;
@@ -1278,16 +1303,6 @@ function bootPet() {
         });
         if (P.engineSub) {
           P.engineSub.renderPet({
-            char: P.char,
-            eyesVariant: eyes,
-            mouthVariant: mouth,
-            extraVariant: 'default',
-            accessories: P.accessories || undefined,
-            equip: { head: headId, fx: fxId }
-          });
-        }
-        if (P.engineRpg) {
-          P.engineRpg.renderPet({
             char: P.char,
             eyesVariant: eyes,
             mouthVariant: mouth,
@@ -1516,12 +1531,16 @@ function bootPet() {
     const clipped = clipText(t, 40);
     pushCmdLine('YOU', clipped);
 
+    // Pet lip-sync (TALK)
+    try { window.__hbPet?.react?.('talk'); } catch (_) {}
+
     const ctx = buildChatContext();
 
     const resp = await sendSW('FOLLONE_CHAT', { text: clipped, context: ctx }, 22000);
     if (resp && resp.ok && resp.text) {
       const outRaw = String(resp.text);
       const out = clipText(outRaw, 40);
+      try { window.__hbPet?.react?.('talk'); } catch (_) {}
       speak(out);
       pushCmdLine((app.data.characterId || 'PET').toUpperCase(), out);
     } else {
@@ -1928,26 +1947,6 @@ if (dom.btnBack) dom.btnBack.addEventListener('click', () => setView('home'));
       updateGlance(); updateDiffText();
     });
 
-    // AI CORE buttons (HOME + SETTINGS mirror)
-    const runPrepare = async () => {
-      const resp = await sendSW('FOLLONE_AI_SETUP_START', {});
-      if (resp && resp.ok) speak('準備を開始した。', (app.data.characterId || 'PET').toUpperCase());
-      else speak('準備に失敗した。', (app.data.characterId || 'PET').toUpperCase());
-      await refreshBackend();
-      renderDev();
-    };
-    const runWarmup = async () => {
-      const resp = await sendSW('FOLLONE_BACKEND_WARMUP', {});
-      if (resp && resp.ok) speak('ウォームアップを開始した。', (app.data.characterId || 'PET').toUpperCase());
-      else speak('ウォームアップに失敗した。', (app.data.characterId || 'PET').toUpperCase());
-      await refreshBackend();
-      renderDev();
-    };
-    if (dom.btnPrompt) dom.btnPrompt.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); runPrepare(); });
-    if (dom.btnWarmup) dom.btnWarmup.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); runWarmup(); });
-    if (dom.btnPrompt2) dom.btnPrompt2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); runPrepare(); });
-    if (dom.btnWarmup2) dom.btnWarmup2.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); runWarmup(); });
-
     // presets (ui-only safe)
     if (dom.btnPresetBeginner) dom.btnPresetBeginner.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -2040,6 +2039,54 @@ if (dom.btnBack) dom.btnBack.addEventListener('click', () => setView('home'));
         await writeOne('follone_sensitivity', v);
         updateGlance();
       });
+    });
+
+    // AI CORE actions (Settings)
+    if (dom.btnPrompt) dom.btnPrompt.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dom.btnPrompt.disabled = true;
+      try {
+        await sendSW('FOLLONE_AI_SETUP_START', { source: 'options' });
+        // Poll setup status a little to surface state changes quickly.
+        for (let i = 0; i < 8; i++) {
+          await sleep(700);
+          await refreshBackend();
+        }
+      } finally {
+        dom.btnPrompt.disabled = false;
+      }
+    });
+
+    if (dom.btnWarmup) dom.btnWarmup.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dom.btnWarmup.disabled = true;
+      try {
+        await sendSW('FOLLONE_BACKEND_WARMUP', { source: 'options' });
+        for (let i = 0; i < 6; i++) {
+          await sleep(700);
+          await refreshBackend();
+        }
+      } finally {
+        dom.btnWarmup.disabled = false;
+      }
+    });
+
+    if (dom.btnResetBackend) dom.btnResetBackend.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      // Two-step confirm (as requested)
+      const step1 = confirm('バックエンドを初期化します。ログ/設定の一部が初期化されます。よろしいですか？');
+      if (!step1) return;
+      const step2 = confirm('本当に実行しますか？（取り消せません）');
+      if (!step2) return;
+      dom.btnResetBackend.disabled = true;
+      try {
+        await sendSW('FOLLONE_FACTORY_RESET', { source: 'options' });
+        await sleep(400);
+        await refreshBackend();
+        speak('初期化したよ。必要ならもう一度PREPAREから進めてね。', 'SYSTEM');
+      } finally {
+        dom.btnResetBackend.disabled = false;
+      }
     });
   }
 

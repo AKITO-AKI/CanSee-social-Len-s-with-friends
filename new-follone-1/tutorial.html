@@ -11,9 +11,19 @@
     <header class="tTop">
       <div class="tBrand">
         <div class="tKicker">TUTORIAL</div>
-        <div class="tSub">仮想タイムラインでSpotlightを体験</div>
+        <div class="tSub">はじめての使い方ガイド</div>
+      </div>
+      <div class="tProg" aria-label="進行状況">
+        <div class="tProgTop">
+          <div class="tProgLabel" id="progLabel">CHAPTER 1/3</div>
+          <div class="tProgHint" id="progHint">Overlayの見方</div>
+        </div>
+        <div class="tProgBar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1">
+          <div class="tProgFill" id="progFill"></div>
+        </div>
       </div>
       <div class="tHud">
+        <div class="tChip tChip--ai"><span>AI</span><b id="hudAI">PREP</b></div>
         <div class="tChip"><span>LV</span><b id="hudLv">1</b></div>
         <div class="tChip"><span>XP</span><b id="hudXp">0</b></div>
         <div class="tChip"><span>+XP</span><b id="hudGain">0</b></div>
@@ -22,7 +32,25 @@
 
     <main class="tMain">
       <section class="tTimeline" aria-label="仮想タイムライン">
-        <div class="tTlHead">仮想タイムライン</div>
+        <div class="tTlHead">
+          <div>仮想タイムライン</div>
+          <div class="tTlNote">※練習用／実際のXには影響しません</div>
+        </div>
+
+        <!-- Mock Overlay panel (Chapter 1) -->
+        <div class="tOverlayDemo" id="overlayDemo" aria-label="Overlayの例">
+          <div class="tOHead">
+            <div class="tOLogo">CanSee</div>
+            <div class="tOState"><span>状態</span><b id="demoState">FOCUSED</b></div>
+          </div>
+          <div class="tOMeters">
+            <div class="tOMeter"><span>Focus</span><div class="tBar"><i style="width:78%"></i></div></div>
+            <div class="tOMeter"><span>Variety</span><div class="tBar"><i style="width:32%"></i></div></div>
+            <div class="tOMeter"><span>Explore</span><div class="tBar"><i style="width:45%"></i></div></div>
+          </div>
+          <div class="tOSay" id="demoSay">同じ話題が続いてるかも。少し視野を広げてもいいよ。</div>
+        </div>
+
         <article class="tPost" data-post="0">
           <div class="tHandle">@example</div>
           <div class="tBody">今日はまあまあ。落ち着いていこう。</div>
@@ -38,13 +66,19 @@
       </section>
 
       <aside class="tSide" aria-label="ガイド">
+        <div class="tNav" aria-label="チャプター">
+          <button class="tNavItem" type="button" data-ch="1" id="nav1"><b>1</b><span>Overlayの見方</span></button>
+          <button class="tNavItem" type="button" data-ch="2" id="nav2"><b>2</b><span>危険投稿のデモ</span></button>
+          <button class="tNavItem" type="button" data-ch="3" id="nav3"><b>3</b><span>困った時の復旧</span></button>
+        </div>
+
         <!-- Character guide (tutorial-like overlay) -->
         <div class="tGuide" id="guideCard" role="note" aria-label="ガイド">
           <div class="tGuidePet">
             <canvas id="guidePet" width="64" height="64" aria-label="キャラ"></canvas>
           </div>
           <div class="tBubble">
-            <div class="tChar" id="guideChar">ふぉろね</div>
+            <div class="tChar" id="guideChar">ナビ</div>
             <div class="tSay" id="guideText"></div>
             <div class="tActions" id="guideActions"></div>
           </div>

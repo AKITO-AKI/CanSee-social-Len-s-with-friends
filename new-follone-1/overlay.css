@@ -1072,3 +1072,58 @@
 #follone-loader.show .box{
   outline: 2px solid rgba(42,39,35,0.10);
 }
+
+/* -------------------------------------------------
+   Timeline post analysis status badge (Phase 15+)
+   - Always visible (DONE), fixed at top-right
+   ------------------------------------------------- */
+
+.follone-postBadge{
+  position:absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 9999;
+  pointer-events:none;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-family: var(--font-dot-ui);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(42,39,35,0.78);
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(42,39,35,0.16);
+  box-shadow: 0 10px 30px rgba(18,10,26,0.14), inset 0 1px 0 rgba(255,255,255,0.72);
+  backdrop-filter: blur(10px);
+}
+
+.follone-postBadge .dot{
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(120, 92, 160, 0.65);
+  box-shadow: 0 0 0 2px rgba(120, 92, 160, 0.20);
+}
+
+.follone-postBadge[data-state="analyzing"]{
+  color: rgba(42,39,35,0.82);
+}
+.follone-postBadge[data-state="analyzing"] .dot{
+  animation: folloneBadgePulse 1.1s infinite ease-in-out;
+}
+
+.follone-postBadge[data-state="done"]{
+  opacity: 0.92;
+}
+.follone-postBadge[data-state="done"] .dot{
+  background: rgba(92, 160, 132, 0.68);
+  box-shadow: 0 0 0 2px rgba(92, 160, 132, 0.22);
+}
+
+@keyframes folloneBadgePulse{
+  0%{ transform: scale(1); opacity: 0.6; }
+  50%{ transform: scale(1.25); opacity: 1; }
+  100%{ transform: scale(1); opacity: 0.6; }
+}

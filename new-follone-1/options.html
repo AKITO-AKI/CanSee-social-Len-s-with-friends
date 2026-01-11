@@ -7,17 +7,19 @@
 <link href="options.css" rel="stylesheet"/>
 </head>
 <body class="hb hb-home" data-focus="home">
-<div class="hb-crt"></div>
+<!-- Phase9 (rebrand): yume-kawaii base UI. CRT layer retired. -->
 <header class="hb-top">
 <div class="hb-title">
 <div class="hb-title__main">HOME BASE</div>
 <div class="hb-title__sub">CanSee: Social Lens / Options</div>
 </div>
-<div class="hb-master">
-<label class="hb-chip"><input checked="" id="m-enabled" data-tip="拡張機能の稼働（全体ON/OFF）" type="checkbox"/> ENABLE</label>
-<label class="hb-chip"><input checked="" id="m-analyze" data-tip="解析のON/OFF（危険判定を回す）" type="checkbox"/> ANALYZE</label>
-<label class="hb-chip"><input checked="" id="m-intervene" data-tip="介入のON/OFF（Spotlight・通知など）" type="checkbox"/> INTERVENE</label>
-<label class="hb-chip"><input checked="" id="m-display" data-tip="表示のON/OFF（Overlay表示など）" type="checkbox"/> DISPLAY</label>
+<div class="hb-onb" id="onbBanner" hidden>
+  <div class="hb-onb__title">初回セットアップ</div>
+  <div class="hb-onb__text" id="onbText">TUTORIALでAI準備を始めよう。</div>
+  <div class="hb-row">
+    <button class="hb-btn hb-btn--pri" id="onbStartTutorial" type="button">TUTORIALを始める</button>
+    <button class="hb-btn" id="onbSkip" type="button">後でやる</button>
+  </div>
 </div>
 </header>
 <main class="hb-shell">
@@ -37,53 +39,15 @@
 </div>
 <div class="hb-core">
 <div class="hb-coreGrid">
-<div class="hb-card hb-card--wide hb-card--glance" id="glanceCard">
-  <div class="hb-card__hd">
-    ONE GLANCE
-    <button class="hb-q" type="button" data-help="help-glance" aria-label="この表示について">?</button>
-  </div>
-  <div class="hb-glance">
-    <div class="hb-glance__row">
-      <span class="hb-tag" id="tagExt">EXT: --</span>
-      <span class="hb-tag" id="tagApi">API: --</span>
-      <span class="hb-tag" id="tagAnalyze">ANALYZE: --</span>
-      <span class="hb-tag" id="tagSpot">SPOTLIGHT: --</span>
-      <span class="hb-tag" id="tagDisplay">DISPLAY: --</span>
-      <span class="hb-tag hb-tag--muted" id="tagMode">MODE: --</span>
-    </div>
-    <div class="hb-glance__row hb-glance__row--split">
-      <div class="hb-glance__group">
-        <div class="hb-mini">PAUSE</div>
-        <div class="hb-row">
-          <button class="hb-btn hb-btn--sm" id="btnPauseAll">PAUSE</button>
-          <button class="hb-btn hb-btn--sm" id="btnResumeAll">RESUME</button>
-          <button class="hb-btn hb-btn--sm" id="btnMute" data-tip="発表用：表示だけ静かに（UIは残す）">MUTE UI</button>
-        </div>
-      </div>
-      <div class="hb-glance__group">
-        <div class="hb-mini">PRESET</div>
-        <div class="hb-row">
-          <button class="hb-btn hb-btn--sm" data-preset="beginner">BEGINNER</button>
-          <button class="hb-btn hb-btn--sm" data-preset="standard">STANDARD</button>
-          <button class="hb-btn hb-btn--sm" data-preset="safe">SAFETY</button>
-        </div>
-      </div>
-      <div class="hb-glance__group">
-        <div class="hb-mini">CLOCK</div>
-        <div class="hb-glance__clock">
-          <span id="tStarted">started: --</span>
-          <span id="tUpdated">updated: --</span>
-        </div>
-      </div>
-    </div>
-    <div class="hb-help" id="help-glance" hidden>
-      <div><b>先生・初見者</b>向けの「1秒チェック」です。動作状態と、授業中だけ静かにする <b>PAUSE</b> をここで切り替えられます。</div>
-      <div class="hb-help__mini">※ データはローカル保存。外部送信しません。</div>
-    </div>
-  </div>
-</div>
 <div class="hb-card">
 <div class="hb-card__hd">STATUS <button class="hb-q" type="button" data-help="help-status" aria-label="この表示について">?</button></div>
+<div class="hb-row hb-row--wrap" style="margin-bottom:8px">
+  <span class="hb-tag" id="tagExt">EXT: --</span>
+  <span class="hb-tag" id="tagApi">API: --</span>
+  <span class="hb-tag" id="tagAnalyze">ANALYZE: --</span>
+  <span class="hb-tag" id="tagSpot">SPOTLIGHT: --</span>
+  <span class="hb-tag" id="tagDisplay">DISPLAY: --</span>
+</div>
 <div class="hb-kv">
 <div class="hb-kv__row"><span>LV</span><b id="kvLv">--</b></div>
 <div class="hb-kv__row"><span>XP</span><b id="kvXp">--</b></div>
@@ -94,18 +58,6 @@
 <div class="hb-help" id="help-status" hidden>
   <div><b>TL TYPE</b> は厳密な診断ではなく、今の偏り（Focus/Variety/Explore）からの <b>簡易ラベル</b> です。</div>
   <div><b>XP RATE</b> は、獲得EXPの倍率と理由（減衰など）を表示します。</div>
-</div>
-</div>
-<div class="hb-card">
-<div class="hb-card__hd">AI CORE</div>
-<div class="hb-kv">
-<div class="hb-kv__row"><span>state</span><b id="aiState">unavailable</b></div>
-<div class="hb-kv__row"><span>session</span><b id="aiSession">--</b></div>
-<div class="hb-kv__row"><span>latency</span><b id="aiLatency">--</b></div>
-</div>
-<div class="hb-row">
-<button class="hb-btn hb-btn--pri" id="btnPrompt">PREPARE</button>
-<button class="hb-btn" id="btnWarmup" data-tip="初回ウォームアップ（最初のClassifyまで）">WARMUP</button>
 </div>
 </div>
 <div class="hb-card hb-card--wide">
@@ -122,6 +74,7 @@
 </div>
 <div class="hb-bubble" id="bubble">
 <div class="hb-bubble__name" id="bubbleName">FOLLONE</div>
+<div class="hb-mini hb-muted" id="relationLine">きょうの様子: -- / しんらい: --</div>
 <div class="hb-bubble__text" id="bubbleText">……おかえり。どこから見る？</div>
 <div class="hb-command" id="cmdBar">
   <div class="hb-command__label">CMD</div>
@@ -168,13 +121,22 @@
 <!-- PURPLE: Bias deep evaluation / explanation -->
 <div class="hb-biasDetail">
   <div class="hb-card hb-card--wide">
-    <div class="hb-card__hd">AI EVALUATION</div>
-    <div class="hb-mini" id="biasDetailText">--</div>
-    <div class="hb-mini hb-mini--muted">※ここはPhase8以降で、偏りの理由・改善ヒントを「短文」で出す領域。</div>
+    <div class="hb-card__hd">A: SUMMARY</div>
+    <div class="hb-mini" id="biasA">--</div>
   </div>
-  <div class="hb-card">
-    <div class="hb-card__hd">TOPICS (sample)</div>
-    <ul class="hb-list" id="biasDetailTopics"></ul>
+  <div class="hb-card hb-card--wide">
+    <div class="hb-card__hd">B: WHY</div>
+    <div class="hb-mini" id="biasB">--</div>
+  </div>
+  <div class="hb-card hb-card--wide">
+    <div class="hb-card__hd">C: SUGGEST</div>
+    <div class="hb-mini" id="biasC">--</div>
+    <div class="hb-row hb-row--wrap" style="margin-top:8px">
+      <button class="hb-btn hb-btn--sm" id="btnSug1" type="button">このまま見る</button>
+      <button class="hb-btn hb-btn--sm" id="btnSug2" type="button">別ジャンルを試す</button>
+      <button class="hb-btn hb-btn--sm" id="btnSug3" type="button">今日は軽め</button>
+    </div>
+    <div class="hb-mini hb-mini--muted">※提案は「表示」だけ変わります（解析挙動は変えません）。</div>
   </div>
 </div>
 </div>
@@ -211,33 +173,60 @@
 </div>
 </div>
 
-<!-- MAIN: LOG -->
-<div class="hb-view" data-view="log" style="display:none">
-<div class="hb-paneTitle">ACTIVITY LOG</div>
-<div class="hb-paneSub">Spotlightが出た理由 / 今日の出来事（軽量）</div>
+<!-- MAIN: LOGS (Phase12: Transparency) -->
+<div class="hb-view" data-view="log">
+  <div class="hb-paneTitle">LOGS & TRANSPARENCY</div>
+  <div class="hb-paneSub">保存データの見える化／デバッグ用エクスポート／ログの消去</div>
 
-<div class="hb-settingsGrid">
-<div class="hb-card hb-card--wide">
-<div class="hb-card__hd">SPOTLIGHT REASONS</div>
-<div class="hb-row">
-<button class="hb-btn" id="btnLogRefresh" data-tip="ログを再読み込み">REFRESH</button>
-<button class="hb-btn" id="btnLogSeed" data-tip="デモ用のログを生成（学校展示用）">SEED (demo)</button>
-</div>
-<div class="hb-mini hb-mini--muted">※ JSON生ログではなく、理由が分かる短文ログを表示します。</div>
-<ul class="hb-list hb-list--log" id="spotLog"></ul>
-</div>
+  <div class="hb-settingsGrid">
+    <div class="hb-card hb-card--wide">
+      <div class="hb-card__hd">ABOUT THIS DATA</div>
+      <div class="hb-mini">
+        CanSeeは、SNSの「偏り」を叱らずに観察できるように、<b>集計値</b>と<b>状態</b>を中心に保存します。<br>
+        投稿本文などのセンシティブな内容を、無制限に溜め込む設計にはしません。
+      </div>
+      <ul class="hb-list" style="margin-top:10px">
+        <li class="hb-li"><div class="hb-li__label">保存する主なもの</div><div class="hb-mini">偏り集計（カテゴリ別count）、状態（TL TYPE）、Lv/XP、TRUST/MOOD、クエスト進捗、直近TALKログ（最大10件）</div></li>
+        <li class="hb-li"><div class="hb-li__label">保存しない方針</div><div class="hb-mini">投稿本文をそのまま大量保存しない（必要なら要約/集計に置換）</div></li>
+        <li class="hb-li"><div class="hb-li__label">目的</div><div class="hb-mini">ユーザーに説明可能な状態表示／復帰・デバッグ／学習（将来拡張）</div></li>
+      </ul>
+    </div>
 
-<div class="hb-card">
-<div class="hb-card__hd">WHY EXP?</div>
-<div class="hb-mini" id="xpWhy">--</div>
-<div class="hb-mini hb-mini--muted">例：Focusが高い→獲得EXP 0.4x</div>
-</div>
+    <div class="hb-card">
+      <div class="hb-card__hd">SAVED KEYS</div>
+      <div class="hb-mini hb-mini--muted">ローカルストレージ内の主要キーとサイズの目安</div>
+      <div class="hb-mini" id="logSummary">--</div>
+      <div class="hb-tableWrap">
+        <table class="hb-table" id="logKeys"></table>
+      </div>
+    </div>
 
-<div class="hb-card">
-<div class="hb-card__hd">CAUSE CANDIDATES</div>
-<ul class="hb-list" id="biasCause"></ul>
-</div>
-</div>
+    <div class="hb-card">
+      <div class="hb-card__hd">EXPORT / CLEAR</div>
+      <div class="hb-row hb-row--wrap">
+        <button class="hb-btn hb-btn--pri" id="btnLogCopy">COPY REPORT</button>
+        <button class="hb-btn" id="btnLogDownload">DOWNLOAD JSON</button>
+        <button class="hb-btn" id="btnRefreshLog">REFRESH</button>
+        <button class="hb-btn hb-btn--danger" id="btnClearLogs">CLEAR LOGS</button>
+      </div>
+      <div class="hb-mini hb-mini--muted" style="margin-top:8px">
+        COPY/DOWNLOADは、<b>投稿本文を含めず</b>、状態・集計・設定・直近ログだけをまとめたデバッグレポートです。
+      </div>
+      <pre class="hb-code" id="logReport" aria-label="debug report">--</pre>
+    </div>
+
+    <div class="hb-card hb-card--wide">
+      <div class="hb-card__hd">RECENT ACTIVITY</div>
+      <div class="hb-mini hb-mini--muted">直近のTALK（最大10件）と、今日の軽量ログ（analyzed/spotlight/xp）</div>
+      <div class="hb-row hb-row--wrap" style="margin-top:8px">
+        <span class="hb-tag" id="tagTodayAnalyze">analyzed: --</span>
+        <span class="hb-tag" id="tagTodaySpot">spotlight: --</span>
+        <span class="hb-tag" id="tagTodayXp">xp: --</span>
+      </div>
+      <ul class="hb-list hb-list--log" id="logList"></ul>
+      <div class="hb-mini hb-mini--muted" id="logEmpty" style="display:none">ログがまだありません。</div>
+    </div>
+  </div>
 </div>
 
 <!-- MAIN: SETTINGS -->
@@ -274,16 +263,85 @@
 <!-- Blue: AI controls are better here (mirror of HOME) -->
 <div class="hb-card hb-card--wide hb-card--aiMirror">
   <div class="hb-card__hd">AI CORE</div>
+  <div class="hb-row hb-row--wrap" style="margin-bottom:8px">
+    <span class="hb-tag" id="tagMode">MODE: --</span>
+    <span class="hb-tag hb-tag--muted" id="tStarted">started: --</span>
+    <span class="hb-tag hb-tag--muted" id="tUpdated">updated: --</span>
+  </div>
   <div class="hb-kv">
-    <div class="hb-kv__row"><span>state</span><b id="aiState2">unavailable</b></div>
-    <div class="hb-kv__row"><span>session</span><b id="aiSession2">--</b></div>
-    <div class="hb-kv__row"><span>latency</span><b id="aiLatency2">--</b></div>
+    <div class="hb-kv__row"><span>state</span><b id="aiState">unavailable</b></div>
+    <div class="hb-kv__row"><span>session</span><b id="aiSession">--</b></div>
+    <div class="hb-kv__row"><span>latency</span><b id="aiLatency">--</b></div>
   </div>
   <div class="hb-row">
-    <button class="hb-btn hb-btn--pri" id="btnPrompt2">PREPARE</button>
-    <button class="hb-btn" id="btnWarmup2" data-tip="初回ウォームアップ（最初のClassifyまで）">WARMUP</button>
+    <button class="hb-btn hb-btn--pri" id="btnPrompt">PREPARE</button>
+    <button class="hb-btn" id="btnWarmup" data-tip="初回ウォームアップ（最初のClassifyまで）">WARMUP</button>
+    <button class="hb-btn" id="btnResetBackend" data-tip="AIが固まった時だけ使う（オフスクリーンを閉じて再作成）">RESET BACKEND</button>
   </div>
-  <div class="hb-mini hb-mini--muted">※HOMEと同じ操作。押す場所をここにも増やしただけ。</div>
+  <div class="hb-mini" style="margin-top:8px">
+    <b>FEATURE SWITCHES</b>
+  </div>
+  <div class="hb-row hb-row--wrap hb-row--dense" style="margin-top:6px">
+    <label class="hb-check" data-tip="拡張機能の稼働（全体ON/OFF）"><input checked="" id="m-enabled" type="checkbox"/> ENABLE</label>
+    <label class="hb-check" data-tip="投稿の解析を実行（危険判定を回す）"><input checked="" id="m-analyze" type="checkbox"/> ANALYZE</label>
+    <label class="hb-check" data-tip="Spotlightなどの介入演出"><input checked="" id="m-intervene" type="checkbox"/> INTERVENE</label>
+    <label class="hb-check" data-tip="Overlay表示／解析済みマーカー表示"><input checked="" id="m-display" type="checkbox"/> DISPLAY</label>
+    <label class="hb-check" data-tip="学習/育成（発言パターンや好み推定）。今は最小実装で保存のみ。"><input checked="" id="m-learn" type="checkbox"/> LEARN</label>
+  </div>
+  <div class="hb-mini hb-mini--muted">※各項目は「何が変わるか」をツールチップで説明します。</div>
+
+<div class="hb-card hb-card--wide">
+  <div class="hb-card__hd">RUNTIME OPTIONS</div>
+  <div class="hb-mini">※普段触る設定はここに集約（サイドのボタン群は削減）</div>
+
+  <div class="hb-row hb-row--wrap hb-row--dense" style="margin-top:10px">
+    <label class="hb-check" data-tip="危険度判定のフィルタを有効化"><input checked="" id="qsSafe" type="checkbox"/> Safe Filter</label>
+    <label class="hb-check" data-tip="強い介入の前にソフトな注意を出す"><input id="qsWarn" type="checkbox"/> Soft Warning</label>
+    <label class="hb-check" data-tip="表示されている投稿を自動で解析"><input checked="" id="qsAuto" type="checkbox"/> Auto Scan</label>
+    <label class="hb-check" data-tip="Spotlight時に通知を出す (対応ブラウザのみ)"><input id="qsNotify" type="checkbox"/> Notify</label>
+  </div>
+
+  <div class="hb-hr"></div>
+
+  <div class="hb-mini"><b>SPOTLIGHT STRENGTH</b></div>
+  <div class="hb-row hb-row--wrap hb-row--dense" id="qsSpot" role="group" aria-label="spotlight strength" style="margin-top:6px">
+    <button class="hb-pill" data-spot="soft" data-tip="強調弱め (授業中でも邪魔になりにくい)">SOFT</button>
+    <button class="hb-pill is-on" data-spot="normal" data-tip="標準">NORMAL</button>
+    <button class="hb-pill" data-spot="hard" data-tip="強め (気づきやすい)">HARD</button>
+  </div>
+
+  <div class="hb-hr"></div>
+  <div class="hb-mini">LOCAL ONLY</div>
+  <div class="hb-mini hb-muted">解析・設定データはこのPC内に保存されます。外部送信しません。</div>
+</div>
+
+</div>
+
+
+<div class="hb-card hb-card--wide">
+  <div class="hb-card__hd">RUNTIME OPTIONS</div>
+  <div class="hb-mini">※普段触る設定はここに集約（ページ上部のボタン群はここへ）</div>
+
+  <div class="hb-row hb-row--wrap hb-row--dense" style="margin-top:10px">
+    <label class="hb-check" data-tip="危険度判定のフィルタを有効化"><input checked="" id="qsSafe" type="checkbox"/> Safe Filter</label>
+    <label class="hb-check" data-tip="強い介入の前にソフトな注意を出す"><input id="qsWarn" type="checkbox"/> Soft Warning</label>
+    <label class="hb-check" data-tip="表示されている投稿を自動で解析"><input checked="" id="qsAuto" type="checkbox"/> Auto Scan</label>
+    <label class="hb-check" data-tip="Spotlight時に通知を出す（対応ブラウザのみ）"><input id="qsNotify" type="checkbox"/> Notify</label>
+  </div>
+
+  <div class="hb-hr"></div>
+
+  <div class="hb-mini"><b>SPOTLIGHT STRENGTH</b></div>
+  <div class="hb-row hb-row--wrap hb-row--dense" id="qsSpot" role="group" aria-label="spotlight strength" style="margin-top:6px">
+    <button class="hb-pill" data-spot="soft" data-tip="強調弱め（授業中でも邪魔になりにくい）">SOFT</button>
+    <button class="hb-pill is-on" data-spot="normal" data-tip="標準">NORMAL</button>
+    <button class="hb-pill" data-spot="hard" data-tip="強め（気づきやすい）">HARD</button>
+  </div>
+
+  <div class="hb-hr"></div>
+
+  <div class="hb-mini">LOCAL ONLY</div>
+  <div class="hb-mini hb-muted">解析・設定データはこのPC内に保存されます。外部送信しません。</div>
 </div>
 
 </div>
@@ -384,76 +442,38 @@
 <button class="hb-tab" data-open="bias">BIAS</button>
 <button class="hb-tab" data-open="settings">SETTINGS</button>
 <button class="hb-tab" data-open="rpg">RPG</button>
+<button class="hb-tab" data-open="log">LOG</button>
 </div>
 <div class="hb-sideStack">
-<button class="hb-sideCard" data-open="bias">
+<div class="hb-sideCard hb-sideCard--info">
 <div class="hb-sideCard__hd">BIAS</div>
 <div class="hb-sideCard__bd">
 <div class="hb-mini">今週の傾向</div>
 <div class="hb-mini" id="sideBias">Focus -- / Variety -- / Explore --</div>
 </div>
-</button>
-<button class="hb-sideCard" data-open="quest">
+</div>
+
+<div class="hb-sideCard hb-sideCard--info">
 <div class="hb-sideCard__hd">QUEST</div>
 <div class="hb-sideCard__bd">
 <div class="hb-mini" id="sideQuest">Daily -- / Weekly --</div>
 </div>
-</button>
+</div>
 
-<button class="hb-sideCard" data-open="log" data-tip="Spotlightの理由ログ／偏りの原因候補／EXP減衰理由">
+<div class="hb-sideCard hb-sideCard--info">
   <div class="hb-sideCard__hd">LOG</div>
   <div class="hb-sideCard__bd">
     <div class="hb-mini" id="sideLog">Spotlight --</div>
   </div>
-</button>
-<button class="hb-sideCard" data-open="settings">
-<div class="hb-sideCard__hd">QUICK SETTINGS</div>
-<div class="hb-sideCard__bd">
-<div class="hb-mini hb-sideLabel">MODE</div>
-<div class="hb-row hb-row--wrap">
-  <button class="hb-btn hb-btn--sm" id="btnSchool">SCHOOL</button>
-  <button class="hb-btn hb-btn--sm" id="btnPersonal">PERSONAL</button>
-  <button class="hb-btn hb-btn--sm" id="btnDiff" title="デフォルトとの差分" data-dev-only="1">DIFF</button>
 </div>
 
-<div class="hb-mini hb-sideLabel" style="margin-top:10px;">MASTER</div>
-<div class="hb-row hb-row--wrap hb-row--dense" id="qsMaster">
-  <button class="hb-chip hb-chip--big" data-master="enabled" data-tip="拡張の稼働 (全体ON/OFF)">EXT</button>
-  <button class="hb-chip hb-chip--big" data-master="analyze" data-tip="投稿の解析を実行">ANALYZE</button>
-  <button class="hb-chip hb-chip--big" data-master="intervene" data-tip="Spotlightなど介入演出">SPOTLIGHT</button>
-  <button class="hb-chip hb-chip--big" data-master="display" data-tip="Overlayの表示">DISPLAY</button>
+<div class="hb-sideCard hb-sideCard--deco" aria-hidden="true">
+  <div class="hb-sideCard__hd">AMBIENT</div>
+  <div class="hb-sideCard__bd">
+    <div class="hb-mini">きらめき：<span class="hb-spark">★</span> <span class="hb-spark">✦</span> <span class="hb-spark">✧</span></div>
+    <div class="hb-mini">画面が少し「呼吸」してるよ。</div>
+  </div>
 </div>
-
-<div class="hb-mini hb-sideLabel" style="margin-top:10px;">CHARACTER</div>
-<div class="hb-seg" id="qsChar" role="group" aria-label="character">
-  <button class="hb-seg__btn" data-char="follone" data-tip="ふぉろね (落ち着いた/ダウナー)">FOLLONE</button>
-  <button class="hb-seg__btn" data-char="likoris" data-tip="りこりす (元気/アクティブ)">LIKORIS</button>
-</div>
-
-<div class="hb-mini hb-sideLabel" style="margin-top:10px;">SENSITIVITY</div>
-<div class="hb-seg" id="qsSens" role="group" aria-label="sensitivity">
-  <button class="hb-seg__btn" data-sens="low" data-tip="判定をゆるめ (誤反応少なめ)">LOW</button>
-  <button class="hb-seg__btn" data-sens="normal" data-tip="標準 (学校推奨)">NORMAL</button>
-  <button class="hb-seg__btn" data-sens="hard" data-tip="判定を厳しく (安全寄り)">HARD</button>
-</div>
-<div class="hb-mini" id="diffText" style="margin-top:6px" data-dev-only="1">diff: --</div>
-<div class="hb-hr"></div>
-<label class="hb-check" data-tip="危険度判定のフィルタを有効化"><input checked="" id="qsSafe" type="checkbox"/> Safe Filter</label>
-<label class="hb-check" data-tip="強い介入の前にソフトな注意を出す"><input id="qsWarn" type="checkbox"/> Soft Warning</label>
-<label class="hb-check" data-tip="表示されている投稿を自動で解析"><input checked="" id="qsAuto" type="checkbox"/> Auto Scan</label>
-
-<div class="hb-mini hb-sideLabel" style="margin-top:10px;">SPOTLIGHT</div>
-<div class="hb-seg" id="qsSpot" role="group" aria-label="spotlight strength">
-  <button class="hb-seg__btn" data-spot="soft" data-tip="強調弱め (授業中でも邪魔になりにくい)">SOFT</button>
-  <button class="hb-seg__btn" data-spot="normal" data-tip="標準">NORMAL</button>
-  <button class="hb-seg__btn" data-spot="hard" data-tip="強め (気づきやすい)">HARD</button>
-</div>
-<label class="hb-check" data-tip="Spotlight時に通知を出す (対応ブラウザのみ)"><input id="qsNotify" type="checkbox"/> Notify</label>
-<div class="hb-hr"></div>
-<div class="hb-mini">LOCAL ONLY</div>
-<div class="hb-mini hb-muted">解析・設定データはこのPC内に保存されます。外部送信しません。</div>
-</div>
-</button>
 </div>
 <!-- character sub monitor: appears only when main is not home -->
 <div class="hb-subChar" id="subChar">

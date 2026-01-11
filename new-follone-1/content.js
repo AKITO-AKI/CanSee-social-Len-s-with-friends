@@ -335,8 +335,53 @@ function bindEquipStorageListener() {
     char: null,
     accessories: null,
     loading: false,
-    engines: new Map() // key: containerId -> PetEngine instance
+    engines: new Map(), // key: containerId -> PetEngine instance
+
+    // Animation state (shared across all avatar canvases)
+    anim: {
+      started: false,
+      raf: 0,
+      lastRenderAt: 0,
+      nextBlinkAt: performance.now() + 1800 + Math.random() * 1800,
+      blinkUntil: 0,
+
+      eyesOverrideUntil: 0,
+      eyesVariant: "normal",
+
+      mouthOverrideUntil: 0,
+      mouthVariant: "idle",
+      mouthNextFlipAt: 0,
+      mouthFlipSeq: ["talk", "o", "dot"],
+      mouthFlipIdx: 0,
+    }
   };
+
+  function petReact(type){
+    // Safe: can be called before assets are loaded.
+    const a = petUI.anim;
+    const now = performance.now();
+    if (type === "talk") {
+      const dur = 750 + Math.random() * 450;
+      a.mouthOverrideUntil = Math.max(a.mouthOverrideUntil || 0, now + dur);
+      a.mouthNextFlipAt = now;
+      a.mouthFlipIdx = (a.mouthFlipIdx + 1) % a.mouthFlipSeq.length;
+      // Make sure loop is running
+      try { startPetAnimLoop(); } catch (_) {}
+      return;
+    }
+    if (type === "danger") {
+      // A sharper reaction for spotlight/danger:
+      // - narrow eyes briefly
+      // - mouth moves a bit longer
+      a.eyesVariant = "narrow";
+      a.eyesOverrideUntil = Math.max(a.eyesOverrideUntil || 0, now + 620);
+      const dur = 900 + Math.random() * 500;
+      a.mouthOverrideUntil = Math.max(a.mouthOverrideUntil || 0, now + dur);
+      a.mouthNextFlipAt = now;
+      a.mouthFlipIdx = (a.mouthFlipIdx + 1) % a.mouthFlipSeq.length;
+      try { startPetAnimLoop(); } catch (_) {}
+    }
+  }
 
   function normalizeCharId(id){
     if (!id) return "follone";
@@ -397,6 +442,56 @@ function bindEquipStorageListener() {
     }
   }
 
+  function startPetAnimLoop(){
+    const a = petUI.anim;
+    if (a.started) return;
+    a.started = true;
+    const tick = (t) => {
+      a.raf = requestAnimationFrame(tick);
+      // Cap to ~30fps to avoid wasting CPU
+      if (t - (a.lastRenderAt || 0) < 33) return;
+      a.lastRenderAt = t;
+
+      if (!petUI.char || petUI.engines.size === 0) return;
+
+      // Blink scheduling
+      if (t >= a.nextBlinkAt) {
+        a.blinkUntil = t + 140;
+        a.nextBlinkAt = t + 1800 + Math.random() * 2200;
+      }
+
+      // Eyes
+      let eyes = (t <= a.blinkUntil) ? "blink" : "normal";
+      if (t <= (a.eyesOverrideUntil || 0) && a.eyesVariant) eyes = a.eyesVariant;
+
+      // Mouth
+      let mouth = "idle";
+      if (t <= (a.mouthOverrideUntil || 0)) {
+        if (t >= (a.mouthNextFlipAt || 0)) {
+          const step = 90 + Math.random() * 50;
+          a.mouthNextFlipAt = t + step;
+          a.mouthFlipIdx = (a.mouthFlipIdx + 1) % a.mouthFlipSeq.length;
+          a.mouthVariant = a.mouthFlipSeq[a.mouthFlipIdx] || "talk";
+        }
+        mouth = a.mouthVariant || "talk";
+      }
+
+      // Render all targets
+      for (const [containerId, eng] of petUI.engines.entries()) {
+        try {
+          eng.renderPet({
+            char: petUI.char,
+            accessories: petUI.accessories,
+            eyesVariant: eyes,
+            mouthVariant: mouth,
+            equip: { head: state.equippedHead || null, fx: state.equippedFx || null }
+          });
+        } catch (_) {}
+      }
+    };
+    a.raf = requestAnimationFrame(tick);
+  }
+
   async function renderPetAvatars(){
     // Mount canvases if containers exist
     ensurePetCanvas("follone-avatar");
@@ -407,19 +502,66 @@ function bindEquipStorageListener() {
 
     if (!petUI.char) return;
 
-    for (const [containerId, eng] of petUI.engines.entries()) {
-      try {
-        eng.renderPet({
-          char: petUI.char,
-          accessories: petUI.accessories,
-          eyesVariant: "normal",
-          mouthVariant: "idle",
-          equip: { head: state.equippedHead || null, fx: state.equippedFx || null }
-        });
-      } catch (e) {
-        // Don't break the UI
+    // Kick the animation loop; it handles drawing.
+    try { startPetAnimLoop(); } catch (_) {}
+  }
+
+  function startPetAnimLoop(){
+    const a = petUI.anim;
+    if (a.started) return;
+    a.started = true;
+
+    const step = (t) => {
+      // Stop if widget is gone (e.g. SPA nav). We'll restart on next mount.
+      if (!document.getElementById("follone-widget")) {
+        a.started = false;
+        a.raf = 0;
+        return;
       }
-    }
+
+      a.raf = requestAnimationFrame(step);
+
+      // Throttle a bit to keep CPU reasonable (about 30fps)
+      if (t - (a.lastRenderAt || 0) < 33) return;
+      a.lastRenderAt = t;
+
+      // Require assets
+      if (!petUI.char || petUI.engines.size === 0) return;
+
+      // Blink scheduling
+      if (t >= (a.nextBlinkAt || 0)) {
+        a.blinkUntil = t + 140;
+        a.nextBlinkAt = t + 1800 + Math.random() * 2200;
+      }
+
+      let eyes = (t <= (a.blinkUntil || 0)) ? "blink" : "normal";
+      if (t <= (a.eyesOverrideUntil || 0) && a.eyesVariant) eyes = a.eyesVariant;
+
+      let mouth = "idle";
+      if (t <= (a.mouthOverrideUntil || 0)) {
+        if (t >= (a.mouthNextFlipAt || 0)) {
+          const stepMs = 90 + Math.random() * 50;
+          a.mouthNextFlipAt = t + stepMs;
+          a.mouthFlipIdx = (a.mouthFlipIdx + 1) % a.mouthFlipSeq.length;
+          a.mouthVariant = a.mouthFlipSeq[a.mouthFlipIdx] || "talk";
+        }
+        mouth = a.mouthVariant || "talk";
+      }
+
+      for (const [_containerId, eng] of petUI.engines.entries()) {
+        try {
+          eng.renderPet({
+            char: petUI.char,
+            accessories: petUI.accessories,
+            eyesVariant: eyes,
+            mouthVariant: mouth,
+            equip: { head: state.equippedHead || null, fx: state.equippedFx || null }
+          });
+        } catch (_) {}
+      }
+    };
+
+    a.raf = requestAnimationFrame(step);
   }
 
 
@@ -3465,12 +3607,9 @@ function choosePriorityBatch(maxN) {
     };
 
     const sorted = candidates.slice().sort((a, b) => {
-      // Phase8 perf: prioritize top-most posts first (users read from the top).
-      // y: smaller means closer to the top of the timeline.
       const sa = score(a), sb = score(b);
-      if (sa.y !== sb.y) return sa.y - sb.y;
-      // If y ties (rare), prefer those nearer the viewport (perceived latency), then sequence.
       if (sa.near !== sb.near) return sa.near - sb.near;
+      if (sa.y !== sb.y) return sa.y - sb.y;
       return sa.seq - sb.seq;
     });
 
@@ -3539,15 +3678,19 @@ function choosePriorityBatch(maxN) {
     const backlog = state.analyzeLow.length;
     if (!backlog) return;
 
-    // Phase8 perf: prioritize throughput while keeping a hard cap.
-    // Strategy:
-    // - Always pick from the top of the timeline first (choosePriorityBatch does that).
-    // - Send up to 6 posts per request to amortize backend latency.
-    // - If backend isn't ready yet, keep it smaller to avoid piling up.
-    const backlogNow = state.analyzeLow.length;
-    let maxN = Math.min(6, Math.max(1, backlogNow));
+    // Dynamic batch sizing (M6-B):
+    // - Keep it stable on school PCs: 3..5 is the sweet spot.
+    // - If latency is low, increase batch to improve throughput.
+    // - If latency spikes, fall back to smaller batches to keep UI responsive.
+    const last = Number(state.lastLatencyMs || 0);
+    const base = Math.max(3, Math.min(5, Number(settings.batchSize || 3)));
+    let maxN = base;
+    if (last && last > 9000) maxN = 1;
+    else if (last && last > 6500) maxN = 2;
+    else if (last && last > 4200) maxN = Math.min(base, 3);
+    else if (last && last < 2600) maxN = Math.min(5, Math.max(base, backlog >= 5 ? 5 : 4));
+    // When backend is not fully ready, avoid piling up.
     if (state.sessionStatus !== "ready") maxN = Math.min(maxN, 2);
-
     const { batch } = choosePriorityBatch(maxN);
     if (!batch.length) return;
 
@@ -3598,7 +3741,7 @@ function choosePriorityBatch(maxN) {
     } finally {
       state.inFlight = false;
       // Continue processing backlog
-      if (state.analyzeHigh.length + state.analyzeLow.length) scheduleAnalyze(0);
+      if (state.analyzeHigh.length + state.analyzeLow.length) scheduleAnalyze(40);
     }
   }
 
@@ -3806,6 +3949,8 @@ function choosePriorityBatch(maxN) {
     state.riskCount += 1;
     log("warn", "[INTERVENE]", "show", { id, cat, score, backend: state.sessionStatus, from: ctx?.from || "unknown" });
     showIntervention(elem, res);
+    // Pet reaction: mouth animation (and a brief eyes change)
+    try { petReact("danger"); } catch (_) {}
     addXp(xpForIntervention(sev));
   }
 

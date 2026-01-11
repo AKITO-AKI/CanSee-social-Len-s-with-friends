@@ -620,6 +620,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return;
     }
 
+    if (msg.type === "FOLLONE_BACKEND_RESET") {
+      try {
+        resetOffscreen("user_reset");
+        await chrome.storage.local.set({
+          follone_backend_state: "unavailable",
+          follone_backend_session: "--",
+          follone_backend_latencyAvg: "--",
+          follone_backend_lastError: ""
+        });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+      return;
+    }
+
     // Onboarding: trigger Prompt API model setup (best-effort, with progress polling).
     if (msg.type === "FOLLONE_AI_SETUP_START") {
       if (await getSimulateNoLM()) {
