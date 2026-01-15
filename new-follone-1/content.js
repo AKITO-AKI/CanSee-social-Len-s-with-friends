@@ -3029,7 +3029,22 @@ const dt = Math.round(performance.now() - t0);
           signalAnyResult({ engine: state.lastEngine, latencyMs: state.lastLatencyMs });
           if ((resp.engine || "prompt_api") === "prompt_api") signalPromptResult({ latencyMs: state.lastLatencyMs });
           signalFirstClassifyDone({ ok: true, engine: state.lastEngine, latencyMs: state.lastLatencyMs });
-          return resp.results;
+          // Defensive: some models can output an empty/partial array while still matching schema.
+          // Ensure we return exactly one result per input post so UI/BIAS can update.
+          const wantIds = batch.map(p => String(p && p.id)).filter(Boolean);
+          const got = Array.isArray(resp.results) ? resp.results : [];
+          const map = new Map();
+          for (const r of got) { if (r && r.id) map.set(String(r.id), r); }
+          const filled = wantIds.map((id) => {
+            const r = map.get(id);
+            if (r) return r;
+            // fallback to a safe mock classification (non-harmful, just for UI continuity)
+            return mockClassifyOne({ id, text: (batch.find(x => String(x && x.id) === id)?.text || "") });
+          });
+          if (!got.length && wantIds.length) {
+            log("warn", "[AI]", "backend returned empty results; using fallback mock for UI", { n: wantIds.length });
+          }
+          return filled;
         } else if (resp) {
           setError("BACKEND_NOT_OK", String(resp?.status || resp?.availability || "unknown"));
           log("warn","[AI]","backend not ok -> empty", { status: resp.status, availability: resp.availability, engine: resp.engine, error: resp.error });
@@ -3906,28 +3921,26 @@ function choosePriorityBatch(maxN) {
       }
       await maybeShowFilterBubble();
     } catch (e) {
-      log("error", "[CLASSIFY]", "failed", String(e));
-    } catch (e) {
       const code = errCodeFromException(e);
 
-// Phase29-B: requeue on classify failure (retry/skip/abort)
-try {
-  const batch = state.inFlightBatch || [];
-  for (const p of batch){
-    if (!p || !p.id) continue;
-    const n = (state.retryCounts.get(p.id) || 0) + 1;
-    state.retryCounts.set(p.id, n);
-    if (n <= MAX_RETRY){
-      // keep priority: put back to front
-      state.analyzeLow.unshift(p);
-      markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
-      markChip(p.elem, `retry ${n}/${MAX_RETRY}`, "retry");
-    } else {
-      markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
-      markChip(p.elem, `error ${code}`, "error");
-    }
-  }
-} catch(_e) {}
+      // Phase29-B: requeue on classify failure (retry/skip/abort)
+      try {
+        const batch = state.inFlightBatch || [];
+        for (const p of batch) {
+          if (!p || !p.id) continue;
+          const n = (state.retryCounts.get(p.id) || 0) + 1;
+          state.retryCounts.set(p.id, n);
+          if (n <= MAX_RETRY) {
+            // keep priority: put back to front
+            state.analyzeLow.unshift(p);
+            markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+            markChip(p.elem, `retry ${n}/${MAX_RETRY}`, "retry");
+          } else {
+            markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+            markChip(p.elem, `error ${code}`, "error");
+          }
+        }
+      } catch (_e) {}
 
       state.failStreak = clamp((state.failStreak || 0) + 1, 0, 12);
       // Backoff grows with fail streak (max ~12s)

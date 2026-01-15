@@ -215,7 +215,7 @@ function sanitizeText(s, maxChars) {
   return t;
 }
 
-function buildSchema(topicList, mode) {
+function buildSchema(topicList, expectedIds, mode) {
   const RISK_ENUM = ["誹謗中傷","政治・扇動","偏見","差別","詐欺・誘導","成人向け","暴力・脅迫","自傷","スパム","その他","なし"];
   const REASON_ENUM = [
     "攻撃的な言い回し","個人への非難","煽り/扇動","属性の一般化","差別的表現",
@@ -223,21 +223,28 @@ function buildSchema(topicList, mode) {
     "スパム/宣伝","過度な断定","低情報量","画像のみ","絵文字のみ"
   ];
   const fast = mode === "fast";
+  const ids = Array.isArray(expectedIds) ? expectedIds.map(String) : [];
+  const n = Math.max(0, ids.length);
+
+  // IMPORTANT:
+  // - results must include exactly one item per input ID (no missing/extra).
+  // - id must be one of the provided IDs.
   return {
     type: "object",
     properties: {
       results: {
         type: "array",
-        maxItems: 20,
+        minItems: n,
+        maxItems: n,
         items: {
           type: "object",
           properties: {
-            id: { type: "string" },
+            id: { type: "string", enum: ids },
             score: { type: "integer", minimum: 0, maximum: 100 },
             kind: { type: "string", enum: RISK_ENUM },
             topic: { type: "string", enum: topicList },
             // Fast pass keeps reasons optional and short (stability + speed).
-            reasons: { type: "array", maxItems: fast ? 1 : 2, items: { type: "string", enum: REASON_ENUM } }
+            reasons: { type: "array", minItems: 0, maxItems: fast ? 1 : 2, items: { type: "string", enum: REASON_ENUM } }
           },
           required: ["id", "score", "kind", "topic", "reasons"],
           additionalProperties: false
@@ -266,6 +273,7 @@ function buildPrompt(batch, topicList, prefs, mode) {
     fast ? "reasons: 指定のタグから最大1つ（自由記述は禁止）" : "reasons: 指定のタグから最大2つ（自由記述は禁止）",
     "重要: 誤爆を避け、迷う場合は score を低めにする。",
     "注意: 差別語/露骨な性的表現/誹謗中傷の文言は再掲しない。タグで表現する。",
+    "厳守: results は入力のIDと同数。IDの順に1件ずつ。欠落/追加は禁止。",
     "出力はJSONのみ。余計な文は出さない。"
   ].join("\n");
 
@@ -279,8 +287,9 @@ function buildPrompt(batch, topicList, prefs, mode) {
   return `${persona}\n${rules}\n\n${payload}`;
 }
 
-async function promptWithLanguageSafe(prompt, schema, outputLanguage) {
+async function promptWithLanguageSafe(prompt, schema, outputLanguage, opts) {
   if (!session) throw new Error("no_session");
+  const allowUnconstrained = !(opts && opts.allowUnconstrained === false);
 
   const attempt = async () => {
     // Try passing outputLanguage if supported; fall back if not.
@@ -290,7 +299,8 @@ async function promptWithLanguageSafe(prompt, schema, outputLanguage) {
       try {
         return await session.prompt(prompt, { responseConstraint: schema, omitResponseConstraintInput: true });
       } catch (e2) {
-        // last fallback: no constraint (should be rare / debug)
+        if (!allowUnconstrained) throw e2;
+        // last fallback: no constraint (debug only)
         return await session.prompt(prompt);
       }
     }
@@ -317,14 +327,49 @@ async function classifyBatch(batch, topicList, prefs) {
 
   const t0 = Date.now();
   const list = Array.isArray(topicList) && topicList.length ? topicList.map(String).slice(0, 30) : ["その他"];
-  const modeFast = true;
-  const schemaFast = buildSchema(list, "fast");
-  const promptFast = buildPrompt(batch, list, prefs, "fast");
+
+  const src = Array.isArray(batch) ? batch : [];
+
+  // Expected IDs (unique, keep order)
+  const expectedIds = [];
+  const expectedSet = new Set();
+  for (const p of src) {
+    const id = String(p?.id || "");
+    if (!id || expectedSet.has(id)) continue;
+    expectedSet.add(id);
+    expectedIds.push(id);
+  }
+
+  const coerceResults = (obj, ids) => {
+    const idList = Array.isArray(ids) ? ids.map(String) : [];
+    const idSet = new Set(idList);
+    const raw = Array.isArray(obj && obj.results) ? obj.results : [];
+    const map = new Map();
+    for (const r of raw) {
+      const id = String(r?.id || "");
+      if (!id || !idSet.has(id)) continue;
+      map.set(id, r);
+    }
+
+    const out = [];
+    for (const id of idList) {
+      const r = map.get(id) || {};
+      const score = Number(r?.score ?? 0);
+      const kind = String(r?.kind || "なし");
+      const topic = String(r?.topic || "その他");
+      const reasons = Array.isArray(r?.reasons) ? r.reasons.slice(0, 2).map(String) : [];
+      out.push({ id, score: Math.max(0, Math.min(100, Math.round(score))), kind, topic, reasons });
+    }
+    return out;
+  };
 
   // ---- Pass 1 (fast) ----
-  const raw1 = await promptWithLanguageSafe(promptFast, schemaFast, "ja");
+  const schemaFast = buildSchema(list, expectedIds, "fast");
+  const promptFast = buildPrompt(src, list, prefs, "fast");
+
   let obj1 = null;
   try {
+    const raw1 = await promptWithLanguageSafe(promptFast, schemaFast, "ja", { allowUnconstrained: false });
     obj1 = JSON.parse(raw1);
   } catch (e) {
     return {
@@ -333,51 +378,42 @@ async function classifyBatch(batch, topicList, prefs) {
       availability: st.availability,
       engine: "prompt_api",
       errorCode: "JSON_PARSE_FAILED",
-      detail: String(e),
-      raw: String(raw1 || "").slice(0, 500)
+      detail: String(e)
     };
   }
 
-  const fastResults = Array.isArray(obj1 && obj1.results) ? obj1.results : [];
-  const byId = new Map(fastResults.map(r => [String(r?.id || ""), r]));
+  let merged = coerceResults(obj1, expectedIds);
 
   // Decide which posts need confirmation.
-  // - Confirm if score is high OR if kind is not "なし" and score is mid-range.
   const toConfirm = [];
-  const seen = new Set();
-  for (const p of (Array.isArray(batch) ? batch : [])) {
-    const id = String(p?.id || "");
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const r = byId.get(id);
+  const confirmIds = [];
+  const confirmSet = new Set();
+  for (const r of merged) {
     const score = Number(r?.score || 0);
     const kind = String(r?.kind || "なし");
     const confirm = (score >= 60) || (kind !== "なし" && score >= 35);
-    if (confirm) toConfirm.push(p);
+    if (!confirm) continue;
+    const id = String(r.id || "");
+    if (!id || confirmSet.has(id)) continue;
+    confirmSet.add(id);
+    confirmIds.push(id);
+    const p = src.find(x => String(x?.id || "") === id);
+    if (p) toConfirm.push(p);
   }
 
   // ---- Pass 2 (confirm) ----
   if (toConfirm.length) {
-    const schema2 = buildSchema(list, "full");
+    const schema2 = buildSchema(list, confirmIds, "full");
     const prompt2 = buildPrompt(toConfirm, list, prefs, "full");
     try {
-      const raw2 = await promptWithLanguageSafe(prompt2, schema2, "ja");
+      const raw2 = await promptWithLanguageSafe(prompt2, schema2, "ja", { allowUnconstrained: false });
       const obj2 = JSON.parse(raw2);
-      const conf = Array.isArray(obj2 && obj2.results) ? obj2.results : [];
-      for (const r of conf) {
-        const id = String(r?.id || "");
-        if (id) byId.set(id, r);
-      }
+      const conf = coerceResults(obj2, confirmIds);
+      const confMap = new Map(conf.map(x => [x.id, x]));
+      merged = merged.map(x => confMap.get(x.id) || x);
     } catch (_e) {
       // If confirm fails, keep fast results.
     }
-  }
-
-  const merged = [];
-  for (const p of (Array.isArray(batch) ? batch : [])) {
-    const id = String(p?.id || "");
-    const r = byId.get(id);
-    if (r) merged.push(r);
   }
 
   const dt = Date.now() - t0;

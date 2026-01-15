@@ -75,6 +75,12 @@ const DEFAULTS = {
   follone_riskPreset: "normal",  // low | normal | hard
   follone_bubblePopup: true,     // show filter-bubble popup
 
+  // Phase4: Daily time limit (healthy use)
+  follone_dailyLimitEnabled: false,
+  follone_dailyLimitMin: 90,
+  follone_dailyWarnBeforeMin: 10,
+  follone_usage_v1: {},
+
 };
 
 // ---------------------------------
@@ -129,6 +135,49 @@ function todayKeyJST() {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+
+// ----------------------------
+// Phase4: Daily usage tracking (local only)
+// ----------------------------
+function pruneOldDayKeys(map, keepDays = 14) {
+  try {
+    const keys = Object.keys(map || {}).sort();
+    if (keys.length <= keepDays) return map;
+    const drop = keys.slice(0, Math.max(0, keys.length - keepDays));
+    for (const k of drop) delete map[k];
+  } catch (_) {}
+  return map;
+}
+
+async function getDailyLimitSettings() {
+  try {
+    const r = await chrome.storage.local.get([
+      "follone_dailyLimitEnabled",
+      "follone_dailyLimitMin",
+      "follone_dailyWarnBeforeMin",
+      "follone_usage_v1"
+    ]);
+    return {
+      enabled: !!r.follone_dailyLimitEnabled,
+      limitMin: Math.max(0, Number(r.follone_dailyLimitMin || 0)),
+      warnBeforeMin: Math.max(0, Number(r.follone_dailyWarnBeforeMin || 0)),
+      usageMap: (r.follone_usage_v1 && typeof r.follone_usage_v1 === "object") ? r.follone_usage_v1 : {}
+    };
+  } catch (e) {
+    return { enabled: false, limitMin: 0, warnBeforeMin: 0, usageMap: {} };
+  }
+}
+
+async function addUsageSeconds(deltaSec) {
+  const d = Math.max(0, Math.floor(Number(deltaSec || 0)));
+  const day = todayKeyJST();
+  const s = await getDailyLimitSettings();
+  const map = pruneOldDayKeys({ ...(s.usageMap || {}) }, 21);
+  map[day] = Math.max(0, Math.floor(Number(map[day] || 0) + d));
+  await chrome.storage.local.set({ follone_usage_v1: map });
+  return { day, usedSec: map[day], map };
 }
 
 
@@ -652,6 +701,57 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: true, sw: "ok", sender: sender?.url || "" });
       return;
     }
+
+    // Phase4: activity ping from content script (daily usage time)
+    if (msg.type === "FOLLONE_ACTIVITY_PING") {
+      try {
+        const activeMs = Math.max(0, Math.floor(Number(msg.activeMs || 0)));
+        const deltaSec = Math.floor(activeMs / 1000);
+        let day = todayKeyJST();
+        let usedSec = 0;
+
+        // Only write when there is a positive delta.
+        if (deltaSec > 0) {
+          const out = await addUsageSeconds(deltaSec);
+          day = out.day;
+          usedSec = out.usedSec;
+        } else {
+          // read current used without writing
+          const s = await getDailyLimitSettings();
+          day = todayKeyJST();
+          usedSec = Math.floor(Number((s.usageMap || {})[day] || 0));
+        }
+
+        const s2 = await getDailyLimitSettings();
+        const enabled = !!s2.enabled;
+        const limitMin = Math.max(0, Number(s2.limitMin || 0));
+        const warnBeforeMin = Math.max(0, Number(s2.warnBeforeMin || 0));
+        const usedMin = usedSec / 60;
+        const remainingMin = (limitMin > 0) ? (limitMin - usedMin) : 0;
+
+        let warnLevel = "none";
+        if (enabled && limitMin > 0) {
+          if (remainingMin <= 0) warnLevel = "over";
+          else if (remainingMin <= warnBeforeMin) warnLevel = "near";
+        }
+
+        sendResponse({
+          ok: true,
+          day,
+          enabled,
+          limitMin,
+          warnBeforeMin,
+          usedSec,
+          usedMin,
+          remainingMin,
+          warnLevel
+        });
+      } catch (e) {
+        sendResponse({ ok: false, errorCode: "ACTIVITY_PING_FAILED", error: String(e) });
+      }
+      return;
+    }
+
 
     // Utility: open the options page (used by onboarding from content script).
     if (msg.type === "FOLLONE_OPEN_OPTIONS") {

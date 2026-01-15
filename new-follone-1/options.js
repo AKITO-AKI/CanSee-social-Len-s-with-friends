@@ -345,6 +345,12 @@
     qsAuto: $('#qsAuto'),
     qsNotify: $('#qsNotify'),
     qsYumeTheme: $('#qsYumeTheme'),
+    // Phase4: daily limit
+    dlEnabled: $('#dlEnabled'),
+    dlLimit: $('#dlLimit'),
+    dlLimitLabel: $('#dlLimitLabel'),
+    dlWarn: $('#dlWarn'),
+    dlWarnLabel: $('#dlWarnLabel'),
     qsSpotL: $('#qsSpotL'),
     qsSpotN: $('#qsSpotN'),
     qsSpotH: $('#qsSpotH'),
@@ -384,7 +390,14 @@
 
     // rpg (Phase3)
     bpTrack: $('#bpTrack'),
-    unlockNextLabel: $('#unlockNextLabel'),
+    
+    bpTrackModal: $('#bpTrackModal'),
+    btnOpenTier: $('#btnOpenTier'),
+    tierModal: $('#tierModal'),
+    tierDetailTitle: $('#tierDetailTitle'),
+    tierDetailText: $('#tierDetailText'),
+    tierPreviewCanvas: $('#tierPreviewCanvas'),
+unlockNextLabel: $('#unlockNextLabel'),
     rpgLv: $('#rpgLv'),
     rpgXp: $('#rpgXp'),
     rpgNext: $('#rpgNext'),
@@ -513,7 +526,7 @@
       ['.hb-tab[data-open="quest"]', 'Daily/Weeklyクエストを開く'],
       ['.hb-tab[data-open="log"]', '理由ログ（Spotlight/偏り/EXP）を開く'],
       ['.hb-tab[data-open="settings"]', '基本設定を開く'],
-      ['.hb-tab[data-open="rpg"]', '成長・解放（RPG）を開く'],
+      ['.hb-tab[data-open="rpg"]', '成長・解放（GAME）を開く'],
       ['#btnBack', '1つ前の画面に戻る'],
       ['#btnPrompt', 'Prompt API を準備（利用可能なら1クリック）'],
       ['#btnWarmup', '初回ウォームアップ（最初のClassifyまで）'],
@@ -736,7 +749,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
 
     if (dom.btnBack) dom.btnBack.classList.toggle('is-on', view !== 'home');
 
-    const titleMap = { home: 'HOME', bias: 'BIAS', quest: 'QUEST', log: 'LOG', settings: 'SETTINGS', rpg: 'RPG', dev: 'DEV' };
+    const titleMap = { home: 'HOME', bias: 'BIAS', quest: 'QUEST', log: 'LOG', settings: 'SETTINGS', rpg: 'GAME', dev: 'DEV' };
     if (dom.mainTitle) dom.mainTitle.textContent = titleMap[view] || String(view || 'HOME');
 
     // Hint text per view
@@ -1371,7 +1384,7 @@ function bootPet() {
 
   
   // -----------------------------
-  // Phase3: RPG (Battle Pass / Unlock preview)
+  // Phase3: GAME (Battle Pass / Unlock preview)
   // -----------------------------
   function speak(text, name) {
     if (!dom.bubble || !dom.bubbleText) return;
@@ -1454,7 +1467,7 @@ function bootPet() {
     const helpText = [
       'GENERAL: /home /bias /quest /log /settings /rpg',
       'AI CORE: /prepare /warmup /status',
-      'RPG/OPS: /suggest /reset',
+      'GAME/OPS: /suggest /reset',
       'SHARE : /export /import',
       'CHAR  : /char follone|likoris',
       'HIDDEN: developer / exit',
@@ -1801,27 +1814,56 @@ function bootPet() {
     return REWARD_TABLE.find(r => r.lv === lv) || null;
   }
 
+  
   function renderBattlePass(lv) {
-    if (!dom.bpTrack) return;
-    dom.bpTrack.innerHTML = '';
-    const start = Math.max(1, lv - 3);
-    const end = lv + 8;
+    const tracks = [];
+    if (dom.bpTrack) tracks.push({ el: dom.bpTrack, mode: 'preview' });
+    if (dom.bpTrackModal) tracks.push({ el: dom.bpTrackModal, mode: 'modal' });
+    if (!tracks.length) return;
 
-    for (let n = start; n <= end; n++) {
+    const start = Math.max(1, lv - 3);
+    const end = lv + 12;
+
+    function setTierDetail(n) {
       const r = rewardAt(n);
-      const node = document.createElement('div');
-      node.className = 'hb-bpNode' + (n === lv ? ' is-on' : '') + (n < lv ? ' is-done' : '');
-      node.innerHTML = `
-        <div class="hb-bpDot"></div>
-        <div class="hb-bpLv">Lv ${n}</div>
-        <div class="hb-bpReward">${r ? r.label : '—'}</div>
-      `;
-      node.addEventListener('click', () => {
-        if (r) speak(`Lv${r.lv}で「${r.label}」が解放。`, (app.data.characterId || 'PET').toUpperCase());
-        else speak(`Lv${n}：報酬なし。次の節目に備えよう。`, (app.data.characterId || 'PET').toUpperCase());
-      });
-      dom.bpTrack.appendChild(node);
+      const title = `Tier ${n}`;
+      const text = r ? `Lv${r.lv}で「${r.label}」が解放。装備は head / fx に入るよ。` : 'このTierは節目じゃない。次の解放に向けて進めよう。';
+      if (dom.tierDetailTitle) dom.tierDetailTitle.textContent = title;
+      if (dom.tierDetailText) dom.tierDetailText.textContent = text;
     }
+
+    function mountTrack({ el, mode }) {
+      el.innerHTML = '';
+      for (let n = start; n <= end; n++) {
+        const r = rewardAt(n);
+        const node = document.createElement('div');
+        node.className = 'hb-bpNode' + (n === lv ? ' is-current' : '') + (n < lv ? ' is-done' : '');
+        node.textContent = `T${n}`;
+        node.title = r ? `Tier ${n}: ${r.label}` : `Tier ${n}`;
+        node.dataset.tier = String(n);
+
+        node.addEventListener('click', () => {
+          setTierDetail(n);
+          // highlight inside this track
+          el.querySelectorAll('.hb-bpNode').forEach((x) => x.classList.toggle('is-current', x.dataset.tier === String(n)));
+
+          if (r) speak(`Tier${n}で「${r.label}」が解放。`, (app.data.characterId || 'PET').toUpperCase());
+          else speak(`Tier${n}：節目じゃない。次の解放へ。`, (app.data.characterId || 'PET').toUpperCase());
+        });
+
+        el.appendChild(node);
+      }
+
+      // default focus
+      const defaultTier = Math.max(1, Math.min(end, lv));
+      const cur = el.querySelector(`.hb-bpNode[data-tier="${defaultTier}"]`);
+      if (cur) {
+        cur.classList.add('is-current');
+        if (mode === 'modal') setTierDetail(defaultTier);
+      }
+    }
+
+    tracks.forEach(mountTrack);
   }
 
   function renderRpg() {
@@ -1838,7 +1880,7 @@ function bootPet() {
 
     const nr = nextReward(lv);
     if (dom.unlockNextLabel) {
-      dom.unlockNextLabel.textContent = nr ? `Next Unlock: Lv ${nr.lv} / ${nr.label}` : 'Next Unlock: --';
+      dom.unlockNextLabel.textContent = nr ? `Lv ${nr.lv} / ${nr.label}` : '--';
     }
 
     if (dom.btnClaimDemo) {
@@ -2177,6 +2219,411 @@ function renderAccessorySelects() {
   } catch (_) {}
 }
 
+  // Render small portraits for the character picker (Settings -> BASIC)
+  function bootCharPicker() {
+    const cvF = document.getElementById('pickCanvasFollone');
+    const cvL = document.getElementById('pickCanvasLikoris');
+    if (!cvF && !cvL) return;
+
+    const PetEngine = window.PetEngine;
+    if (!PetEngine) return;
+
+    // Resolve extension URL safely
+    const resolveExtURL = (path) => {
+      try {
+        if (window.chrome?.runtime?.getURL) return window.chrome.runtime.getURL(path);
+      } catch (_) {}
+      return path;
+    };
+
+    const ensurePicker = async (cv, id) => {
+      if (!cv) return;
+      const ctx = cv.getContext('2d');
+      if (ctx) ctx.imageSmoothingEnabled = false;
+
+      // Keep a single engine per canvas
+      if (!window.__hbPick) window.__hbPick = {};
+      const P = window.__hbPick;
+      if (!P.engines) P.engines = {};
+      if (!P.engines[id]) {
+        try {
+          P.engines[id] = new PetEngine({ canvas: cv, debug: false, pixelSize: 1 });
+        } catch (e) {
+          console.warn('[HB] picker PetEngine ctor failed', e);
+          return;
+        }
+      }
+      const engine = P.engines[id];
+
+      const selectURL = resolveExtURL(`pet/data/characters_select/${id}.json`);
+      const normalURL = resolveExtURL(`pet/data/characters/${id}.json`);
+
+      let char = null;
+      try {
+        char = await engine.loadCharacterFromURL(selectURL);
+      } catch (e) {
+        try {
+          char = await engine.loadCharacterFromURL(normalURL);
+        } catch (e2) {
+          console.warn('[HB] picker character load failed', id, e2);
+          return;
+        }
+      }
+
+      try {
+        engine.renderPet({
+          char,
+          eyesVariant: 'normal',
+          mouthVariant: 'idle',
+          extraVariant: 'default'
+        });
+      } catch (e) {
+        console.warn('[HB] picker render error', e);
+      }
+    };
+
+    // draw both in parallel; ignore errors
+    ensurePicker(cvF, 'follone');
+    ensurePicker(cvL, 'likoris');
+  }
+
+
+
+
+  // ------------------------------------------
+  // Tier System Modal (GAME)
+  // ------------------------------------------
+  function isTierModalOpen() {
+    return !!(dom.tierModal && dom.tierModal.classList.contains('is-open'));
+  }
+
+  function openTierModal() {
+    if (!dom.tierModal) return;
+    dom.tierModal.classList.add('is-open');
+    dom.tierModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('hb-modalOpen');
+
+    // render details fresh
+    const lv = Number(app.data.level || 0);
+    renderBattlePass(lv);
+
+    // preview canvas: copy current GAME canvas (best-effort)
+    try {
+      const src = document.getElementById('petCanvasRpg');
+      const dst = dom.tierPreviewCanvas;
+      if (src && dst) {
+        const ctx = dst.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = false;
+          ctx.clearRect(0,0,dst.width,dst.height);
+          ctx.drawImage(src, 0, 0, dst.width, dst.height);
+        }
+      }
+    } catch (_) {}
+  }
+
+  function closeTierModal() {
+    if (!dom.tierModal) return;
+    dom.tierModal.classList.remove('is-open');
+    dom.tierModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('hb-modalOpen');
+  }
+
+  function bootTierModalUI() {
+    if (!dom.btnOpenTier || !dom.tierModal) return;
+
+    dom.btnOpenTier.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      openTierModal();
+    });
+
+    dom.tierModal.querySelectorAll('[data-close="tier"]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        closeTierModal();
+      });
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isTierModalOpen()) closeTierModal();
+    });
+  }
+
+
+  // ------------------------------------------
+  // Character Slot (full-screen)
+  // ------------------------------------------
+  const CHAR_SLOT_INFO = {
+    follone: {
+      name: 'FOLLONE',
+      tag: 'まったり寄り添う',
+      bullets: [
+        '落ち着いたトーンで、視野をゆっくり広げる。',
+        '危険投稿は「やさしく減速」して見落としを防ぐ。',
+        '疲れた時のリセット役。休憩の提案も得意。'
+      ]
+    },
+    likoris: {
+      name: 'LIKORIS',
+      tag: '元気に背中を押す',
+      bullets: [
+        'テンポ良く、行動を後押しする。',
+        '気になる投稿は「確認→判断」の導線で迷いを減らす。',
+        '探索・学びを促すクエストが得意。'
+      ]
+    }
+  };
+
+  function getCharSlotInfo(id) {
+    return CHAR_SLOT_INFO[id] || CHAR_SLOT_INFO.follone;
+  }
+
+  function isCharSlotOpen() {
+    const modal = document.getElementById('charSlotModal');
+    return !!(modal && modal.classList.contains('is-open'));
+  }
+
+  function bootCharSlotUI() {
+    // BASIC row
+    bootCharNowPortrait().catch(()=>{});
+
+    const btnOpen = document.getElementById('btnOpenCharSlot');
+    const modal = document.getElementById('charSlotModal');
+    if (!btnOpen || !modal) return;
+
+    btnOpen.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      openCharSlot();
+    });
+
+    // close
+    modal.querySelectorAll('[data-close="1"]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        closeCharSlot();
+      });
+    });
+    const btnClose = document.getElementById('btnCloseCharSlot');
+    if (btnClose) btnClose.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeCharSlot();
+    });
+
+    // choices
+    modal.querySelectorAll('[data-char-choice]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const id = btn.getAttribute('data-char-choice');
+        if (!id) return;
+        setCharSlotPending(id);
+      });
+    });
+
+    // confirm
+    const btnConfirm = document.getElementById('btnCharSlotConfirm');
+    if (btnConfirm) btnConfirm.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const pending = window.__hbCharSlot?.pendingId;
+      if (!pending) return;
+      btnConfirm.disabled = true;
+      try {
+        await setCharacterId(pending);
+        await bootCharNowPortrait();
+        closeCharSlot();
+      } finally {
+        btnConfirm.disabled = false;
+      }
+    });
+
+    // esc
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isCharSlotOpen()) closeCharSlot();
+    });
+
+    // keep in sync
+    if (!window.__hbCharSlotBound) {
+      window.__hbCharSlotBound = true;
+      window.addEventListener('hb:petReload', () => {
+        bootCharNowPortrait().catch(()=>{});
+        if (isCharSlotOpen()) {
+          const id = window.__hbCharSlot?.pendingId || app.data.characterId || 'follone';
+          setCharSlotPending(id, { silent: true });
+        }
+      });
+    }
+  }
+
+  function openCharSlot() {
+    const modal = document.getElementById('charSlotModal');
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('hb-modalOpen');
+
+    if (!window.__hbCharSlot) window.__hbCharSlot = {};
+    const id = app.data.characterId || 'follone';
+    setCharSlotPending(id, { silent: true });
+
+    // render icons once (best-effort)
+    renderCharSlotIcons().catch(()=>{});
+
+    const btnConfirm = document.getElementById('btnCharSlotConfirm');
+    if (btnConfirm) btnConfirm.focus();
+  }
+
+  function closeCharSlot() {
+    const modal = document.getElementById('charSlotModal');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('hb-modalOpen');
+  }
+
+  function setCharSlotPending(id, { silent=false } = {}) {
+    const next = String(id || '').trim().toLowerCase();
+    if (!next) return;
+    if (!window.__hbCharSlot) window.__hbCharSlot = {};
+    window.__hbCharSlot.pendingId = next;
+
+    // highlight
+    const modal = document.getElementById('charSlotModal');
+    if (modal) {
+      modal.querySelectorAll('[data-char-choice]').forEach((btn) => {
+        btn.classList.toggle('is-on', btn.getAttribute('data-char-choice') === next);
+      });
+    }
+
+    // info
+    const info = getCharSlotInfo(next);
+    const elName = document.getElementById('charSlotName');
+    const elTag = document.getElementById('charSlotTag');
+    const elList = document.getElementById('charSlotList');
+    if (elName) elName.textContent = info.name;
+    if (elTag) elTag.textContent = info.tag;
+    if (elList) {
+      elList.innerHTML = '';
+      for (const t of (info.bullets || [])) {
+        const li = document.createElement('li');
+        li.textContent = t;
+        elList.appendChild(li);
+      }
+    }
+
+    const hint = document.getElementById('charSlotHint');
+    if (hint) hint.textContent = `今見ているのは ${info.name}。中央の「選択」で確定。`;
+
+    if (!silent) speak(`${info.name} をプレビュー中。`, 'SYSTEM');
+
+    // preview
+    renderCharSlotPreview(next).catch(()=>{});
+  }
+
+  async function bootCharNowPortrait() {
+    const cv = document.getElementById('charNowCanvas');
+    if (!cv) return;
+    const elName = document.getElementById('charNowName');
+    const elDesc = document.getElementById('charNowDesc');
+    const id = app.data.characterId || 'follone';
+    const info = getCharSlotInfo(id);
+    if (elName) elName.textContent = info.name;
+    if (elDesc) elDesc.textContent = info.tag;
+    await renderPetStill(cv, id, { eyes: 'normal', mouth: 'idle' });
+  }
+
+  async function renderCharSlotIcons() {
+    const cvF = document.getElementById('slotIconFollone');
+    const cvL = document.getElementById('slotIconLikoris');
+    if (cvF) await renderPetStill(cvF, 'follone', { eyes: 'normal', mouth: 'idle' });
+    if (cvL) await renderPetStill(cvL, 'likoris', { eyes: 'normal', mouth: 'idle' });
+  }
+
+  async function renderCharSlotPreview(id) {
+    const cv = document.getElementById('charSlotPreview');
+    if (!cv) return;
+    await renderPetStill(cv, id, { eyes: 'normal', mouth: 'idle' });
+  }
+
+  async function renderPetStill(canvas, id, { eyes='normal', mouth='idle' } = {}) {
+    const PetEngine = window.PetEngine;
+    if (!PetEngine || !canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.imageSmoothingEnabled = false;
+
+    // cache engines by canvas id
+    if (!window.__hbStillEngines) window.__hbStillEngines = {};
+    const key = canvas.id || `${id}_${canvas.width}x${canvas.height}`;
+    if (!window.__hbStillEngines[key]) {
+      try {
+        window.__hbStillEngines[key] = new PetEngine({ canvas, debug: false, pixelSize: 1 });
+      } catch (e) {
+        console.warn('[HB] still PetEngine ctor failed', e);
+        return;
+      }
+    }
+    const engine = window.__hbStillEngines[key];
+
+    const resolveExtURL = (path) => {
+      try {
+        if (window.chrome?.runtime?.getURL) return window.chrome.runtime.getURL(path);
+      } catch (_) {}
+      return path;
+    };
+
+    const normalURL = resolveExtURL(`pet/data/characters/${id}.json`);
+
+    let ch = null;
+    try {
+      ch = await engine.loadCharacterFromURL(normalURL);
+    } catch (e) {
+      console.warn('[HB] still character load failed', id, e);
+      return;
+    }
+
+    try {
+      engine.renderPet({
+        char: ch,
+        eyesVariant: eyes,
+        mouthVariant: mouth,
+        extraVariant: 'default'
+      });
+    } catch (e) {
+      console.warn('[HB] still render error', e);
+    }
+  }
+
+  function bindCharCardTilt() {
+    const cards = document.querySelectorAll('.hb-charCard[data-char]');
+    if (!cards || !cards.length) return;
+    const MAX = 8; // degrees
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    cards.forEach((card) => {
+      // mouse tilt
+      card.addEventListener('mousemove', (e) => {
+        const r = card.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dx = (e.clientX - cx) / (r.width / 2);
+        const dy = (e.clientY - cy) / (r.height / 2);
+        const ry = clamp(dx * MAX, -MAX, MAX);
+        const rx = clamp(-dy * MAX, -MAX, MAX);
+        card.style.setProperty('--ry', `${ry}deg`);
+        card.style.setProperty('--rx', `${rx}deg`);
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.setProperty('--ry', `0deg`);
+        card.style.setProperty('--rx', `0deg`);
+      });
+      // keyboard
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          card.click();
+        }
+      });
+    });
+  }
+
 
 function bindAccessory() {
   if (dom.selHead) {
@@ -2417,6 +2864,10 @@ if (dom.selHead || dom.selFx) {
 
     // Boot PetEngine AFTER we know the selected character (fix: Options always fell back to follone on load)
     bootPet();
+    // Settings: Character selection slot (full-screen)
+    bootCharSlotUI();
+    // GAME: Tier modal
+    bootTierModalUI();
 
     // UI mode
     schoolMode = !!obj.follone_ui_schoolMode;
@@ -2534,7 +2985,70 @@ if (dom.selHead || dom.selFx) {
   // -----------------------------
   // Phase24: X visual tone (lightweight CSS intervention)
   // -----------------------------
-  (function initYumeThemeToggle(){
+  
+  // -----------------------------
+  // Phase4: Daily limit controls (local-only)
+  // -----------------------------
+  (function initDailyLimitControls(){
+    const en = dom.dlEnabled;
+    const limit = dom.dlLimit;
+    const warn = dom.dlWarn;
+    const ll = dom.dlLimitLabel;
+    const wl = dom.dlWarnLabel;
+    if (!en || !limit || !warn) return;
+
+    function fmtMin(n){ return `${Math.round(Number(n)||0)} min`; }
+    function fmtWarn(n){ return `${Math.round(Number(n)||0)} min before`; }
+
+    function applyEnabledUI(v){
+      const on = !!v;
+      limit.disabled = !on;
+      warn.disabled = !on;
+      limit.style.opacity = on ? '1' : '.45';
+      warn.style.opacity = on ? '1' : '.45';
+    }
+
+    function syncLabels(){
+      if (ll) ll.textContent = fmtMin(limit.value);
+      if (wl) wl.textContent = fmtWarn(warn.value);
+    }
+
+    chrome.storage.local.get({
+      follone_dailyLimitEnabled: false,
+      follone_dailyLimitMin: 90,
+      follone_dailyWarnBeforeMin: 10
+    }, (res) => {
+      en.checked = !!res.follone_dailyLimitEnabled;
+      limit.value = String(res.follone_dailyLimitMin ?? 90);
+      warn.value = String(res.follone_dailyWarnBeforeMin ?? 10);
+      syncLabels();
+      applyEnabledUI(en.checked);
+    });
+
+    en.addEventListener('change', () => {
+      const v = !!en.checked;
+      applyEnabledUI(v);
+      chrome.storage.local.set({ follone_dailyLimitEnabled: v });
+      try { speak(v ? '今日の利用時間の警告を有効化した。' : '今日の利用時間の警告を無効化した。', { mood: v ? 'happy' : 'neutral' }); } catch (_) {}
+    });
+
+    const write = () => {
+      const lim = Math.max(15, Math.min(360, Math.round(Number(limit.value || 90))));
+      const wb = Math.max(1, Math.min(60, Math.round(Number(warn.value || 10))));
+      limit.value = String(lim);
+      warn.value = String(Math.min(wb, lim)); // keep warn <= limit
+      syncLabels();
+      chrome.storage.local.set({
+        follone_dailyLimitMin: lim,
+        follone_dailyWarnBeforeMin: Math.min(wb, lim)
+      });
+    };
+
+    limit.addEventListener('input', write);
+    warn.addEventListener('input', write);
+  })();
+
+(function initYumeThemeToggle(){
     const el = dom.qsYumeTheme;
     if(!el) return;
     chrome.storage.local.get({ follone_xThemeEnabled: false }, (res)=>{

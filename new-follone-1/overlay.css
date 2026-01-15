@@ -1183,3 +1183,74 @@
 #cansee-demo-hint .h-chip{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,209,232,.55);font-weight:800;font-size:11px;margin-right:6px}
 #cansee-demo-hint .h-x{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:14px;cursor:pointer;color:#999}
 @keyframes canseeHintIn{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+
+/* === Phase4: Daily limit popup (separate from overlay UI) === */
+#follone-limitPopup{
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%) translateY(12px);
+  z-index: 2147483647;
+  width: min(360px, calc(100vw - 24px));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+#follone-limitPopup.is-show{
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+#follone-limitPopup .lp-card{
+  border-radius: 18px;
+  padding: 12px 12px 10px;
+  background: rgba(255,255,255,0.86);
+  border: 1px solid rgba(155,135,255,0.22);
+  box-shadow: 0 18px 44px rgba(0,0,0,0.18);
+  backdrop-filter: blur(12px);
+}
+:root[data-char="likoris"] #follone-limitPopup .lp-card{
+  border-color: rgba(253,107,152,0.22);
+}
+#follone-limitPopup .lp-title{
+  font-weight: 900;
+  letter-spacing: .2px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: rgba(20,18,24,0.90);
+}
+#follone-limitPopup .lp-msg{
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(20,18,24,0.78);
+}
+#follone-limitPopup .lp-actions{
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+#follone-limitPopup .lp-btn{
+  cursor: pointer;
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-weight: 900;
+  font-size: 12px;
+  background: rgba(155,135,255,0.92);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(155,135,255,0.22);
+}
+:root[data-char="likoris"] #follone-limitPopup .lp-btn{
+  background: rgba(253,107,152,0.92);
+  box-shadow: 0 10px 26px rgba(253,107,152,0.22);
+}
+#follone-limitPopup .lp-btn.lp-ghost{
+  background: rgba(255,255,255,0.70);
+  color: rgba(20,18,24,0.82);
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: none;
+}
+#follone-limitPopup .lp-btn:active{ transform: translateY(1px); }
