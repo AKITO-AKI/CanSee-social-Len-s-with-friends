@@ -685,6 +685,20 @@
 #follone-spotlight .actions button:hover{ transform: translateY(-1px); filter: brightness(1.02); }
 #follone-spotlight .actions button:active{ transform: translateY(0px) scale(0.99); }
 
+/* Primary CTA: “検索へ” (widen perspective) */
+#follone-spotlight .actions #follone-sp-search{
+  border-color: rgba(126,66,255,0.28);
+  background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(250,245,255,0.78));
+  box-shadow: 0 14px 30px rgba(126,66,255,0.18), 0 10px 24px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.85);
+}
+#follone-spotlight .actions #follone-sp-search:hover{ filter: brightness(1.03) saturate(1.02); }
+
+/* Secondary: “戻る” */
+#follone-spotlight .actions #follone-sp-back{ background: rgba(255,255,255,0.62); }
+
+/* Destructive-ish: “続ける” keeps neutral */
+#follone-spotlight .actions #follone-sp-continue{ background: rgba(255,255,255,0.70); }
+
 /* Strong warning styling */
 @keyframes spWarnPulse { 0%,49%{ box-shadow: 0 26px 60px rgba(0,0,0,0.22), 0 0 0 1px rgba(224,58,58,0.22);} 50%,100%{ box-shadow: 0 30px 70px rgba(0,0,0,0.26), 0 0 0 2px rgba(224,58,58,0.36);} }
 @keyframes spWarnStripe { 0%{ background-position: 0 0; } 100%{ background-position: 44px 0; } }
@@ -935,7 +949,6 @@
     radial-gradient(600px 380px at 20% 15%, var(--ui-accent-glow), transparent 70%),
     repeating-linear-gradient(180deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 7px);
   opacity: 0.95;
-}
 
 #follone-loader .box{
   position: relative;
@@ -950,6 +963,15 @@
   overflow: hidden;
 }
 
+
+#follone-loader.ready .box{
+  transform: translateZ(0) scale(1.01);
+  box-shadow:
+    0 28px 80px rgba(0,0,0,0.26),
+    0 0 0 2px rgba(123,97,255,0.14),
+    inset 0 1px 0 rgba(255,255,255,0.65);
+}
+#follone-loader.ready .brand{ color: rgba(42,39,35,0.92); text-shadow: 0 1px 0 rgba(255,255,255,0.60), 0 0 24px rgba(123,97,255,0.18); }
 #follone-loader .box::after{
   /* inner dot grid */
   content:"";
@@ -1254,160 +1276,3 @@
   box-shadow: none;
 }
 #follone-limitPopup .lp-btn:active{ transform: translateY(1px); }
-
-/* =========================================================
-   Yumekawa Detail Polish (UI-first)
-   - bring back translucent dreamy-cute feel while keeping retro dot UI
-   ========================================================= */
-
-/* Softer pastel base + a bit more "dream" tint */
-#follone-widget{
-  --ui-body-0: #FFF7FB; /* milk pink */
-  --ui-body-1: #F6FAFF; /* milk blue */
-  --ui-body-2: #F3EEFF; /* milk lavender */
-  --ui-line: rgba(42,39,35,0.10);
-
-  --glass-opacity: 0.32;
-  --glass-reflect: 0.22;
-  --glass-scanline: 0.03;
-  --glass-noise: 0.018;
-}
-
-/* Device shell: pastel gradient + sparkle film */
-#follone-widget .deviceBody{
-  background:
-    radial-gradient(420px 260px at 18% 10%, rgba(255,170,210,0.38), transparent 60%),
-    radial-gradient(420px 260px at 88% 0%, rgba(155,220,255,0.34), transparent 62%),
-    radial-gradient(520px 340px at 40% 120%, rgba(204,180,255,0.28), transparent 70%),
-    linear-gradient(180deg, var(--ui-body-0), var(--ui-body-1));
-  border: 1px solid rgba(255,255,255,0.70);
-  box-shadow: 0 14px 34px rgba(0,0,0,0.10);
-}
-
-#follone-widget .deviceBody::before{
-  content:"";
-  position:absolute;
-  inset:-2px;
-  pointer-events:none;
-  background:
-    radial-gradient(2px 2px at 12% 22%, rgba(255,255,255,0.85), transparent 60%),
-    radial-gradient(2px 2px at 26% 12%, rgba(255,255,255,0.75), transparent 60%),
-    radial-gradient(2px 2px at 78% 18%, rgba(255,255,255,0.80), transparent 60%),
-    radial-gradient(2px 2px at 88% 34%, rgba(255,255,255,0.70), transparent 60%),
-    radial-gradient(3px 3px at 64% 72%, rgba(255,255,255,0.55), transparent 60%),
-    radial-gradient(3px 3px at 18% 84%, rgba(255,255,255,0.50), transparent 60%);
-  opacity: 0.55;
-  mix-blend-mode: screen;
-  animation: yumeSparkleDrift 8.6s linear infinite;
-}
-
-@keyframes yumeSparkleDrift{
-  0%{ transform: translateY(0px); opacity: 0.50; }
-  50%{ transform: translateY(-3px); opacity: 0.62; }
-  100%{ transform: translateY(0px); opacity: 0.50; }
-}
-
-/* Inset: more glassy + softer borders */
-#follone-widget .deviceInset{
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.60), rgba(255,255,255,0.40)),
-    radial-gradient(240px 180px at 20% 0%, rgba(255,255,255,0.35), transparent 70%);
-  border: 1px solid rgba(255,255,255,0.62);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), inset 0 -2px 6px rgba(0,0,0,0.10);
-  backdrop-filter: blur(10px);
-}
-
-/* FX layer: slow shimmer */
-#follone-widget .fxLayer{
-  opacity: 0.65;
-  animation: yumeShimmer 5.4s ease-in-out infinite;
-}
-
-@keyframes yumeShimmer{
-  0%{ transform: translateY(0px); filter: saturate(1.02); }
-  50%{ transform: translateY(-2px); filter: saturate(1.10); }
-  100%{ transform: translateY(0px); filter: saturate(1.02); }
-}
-
-/* Stage: clearer zoning, more dreamy glass */
-#follone-widget .stage{
-  background:
-    radial-gradient(220px 160px at 18% 0%, rgba(255,255,255,0.55), transparent 70%),
-    linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.35));
-  border: 1px solid rgba(255,255,255,0.70);
-  box-shadow:
-    0 10px 26px rgba(0,0,0,0.08),
-    inset 0 1px 0 rgba(255,255,255,0.70);
-  backdrop-filter: blur(10px);
-}
-
-#follone-widget .avatar{
-  background:
-    radial-gradient(180px 120px at 18% 12%, rgba(255,255,255,0.70), rgba(255,255,255,0.45)),
-    radial-gradient(2px 2px at 18% 24%, rgba(255,255,255,0.55), transparent 60%),
-    radial-gradient(2px 2px at 74% 18%, rgba(255,255,255,0.45), transparent 60%);
-  border: 1px solid rgba(255,255,255,0.70);
-}
-
-/* Ticker: keep dot-matrix, but make it pop + cute shine */
-#follone-widget #follone-taskbar.ticker{
-  background:
-    radial-gradient(240px 140px at 24% 0%, rgba(255,255,255,0.58), transparent 70%),
-    linear-gradient(180deg, rgba(255,255,255,0.54), rgba(255,255,255,0.36));
-  border: 1px solid rgba(255,255,255,0.66);
-  box-shadow: 0 12px 26px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.72);
-}
-
-#follone-widget #follone-taskbar.ticker::before{
-  /* pastel dot substrate */
-  background:
-    radial-gradient(rgba(42,39,35,0.07) 1px, transparent 1px);
-  opacity: 0.48;
-}
-
-#follone-widget #follone-taskbar.ticker::after{
-  /* accent glow + moving shine band */
-  background:
-    radial-gradient(240px 120px at 24% 0%, var(--ui-accent-glow), transparent 62%),
-    linear-gradient(90deg, transparent, rgba(255,255,255,0.40), transparent);
-  opacity: 0.55;
-  transform: translateX(-55%);
-  animation: yumeTickerShine 2.8s var(--ease-soft) infinite;
-}
-
-@keyframes yumeTickerShine{
-  0%{ transform: translateX(-60%); }
-  55%{ transform: translateX(60%); }
-  100%{ transform: translateX(60%); }
-}
-
-/* Buttons: slightly more candy + accent rim */
-#follone-widget .miniBtn,
-#follone-widget .actionBtn{
-  border: 1px solid rgba(255,255,255,0.64);
-  box-shadow:
-    0 12px 28px rgba(0,0,0,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.82),
-    0 0 0 2px rgba(255,255,255,0.16);
-}
-
-#follone-widget .miniBtn:hover,
-#follone-widget .actionBtn:hover{
-  filter: brightness(1.05) saturate(1.02);
-}
-
-/* Reduce "too retro" CRT artifacts a bit */
-#follone-widget .glassLayer{
-  opacity: var(--glass-opacity);
-  background:
-    radial-gradient(180px 120px at 20% 0%, rgba(255,255,255,var(--glass-reflect)), transparent 65%),
-    radial-gradient(220px 140px at 90% 10%, rgba(255,255,255,calc(var(--glass-reflect) * 0.75)), transparent 70%),
-    repeating-linear-gradient(180deg, rgba(0,0,0,var(--glass-scanline)) 0px, rgba(0,0,0,var(--glass-scanline)) 1px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 9px);
-}
-
-#follone-widget .glassLayer::after{
-  background:
-    radial-gradient(rgba(42,39,35,var(--glass-noise)) 1px, transparent 1px);
-  background-size: 4px 4px;
-  opacity: 0.55;
-}

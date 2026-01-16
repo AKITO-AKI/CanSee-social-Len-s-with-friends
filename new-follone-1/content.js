@@ -148,90 +148,6 @@
     } catch (_) {}
   }
 
-  // -----------------------------
-  // Injected element tagging & cleanup (Sprint2 reliability)
-  // -----------------------------
-  function tagInjected(el, scope, role) {
-    try {
-      if (!el) return;
-      el.dataset.cansee = String(scope || "ui");
-      if (role) el.dataset.canseeRole = String(role);
-    } catch (_) {}
-  }
-
-  function cleanupInjectedOrphans(reason) {
-    try {
-      const why = String(reason || "");
-
-      // If spotlight is open during SPA navigation, close it first to avoid locks/badges lingering.
-      if ((why === "navigate" || why === "hard") && state?.spotlightOpen) {
-        try { closeSpotlight("cleanup"); } catch (_) {}
-      }
-
-      // Remove any injected post elements that are no longer inside a tweet article.
-      const nodes = document.querySelectorAll('[data-cansee="post"]');
-      nodes.forEach((n) => {
-        try {
-          if (!n.isConnected) return;
-          if (!n.closest || !n.closest('article')) {
-            n.remove();
-          }
-        } catch (_) {}
-      });
-
-      // Deduplicate UI roots (defensive against re-mount bugs on SPA transitions)
-      try {
-        const ids = ["follone-widget", "follone-overlay", "follone-spotlight", "follone-loader"]; // known roots
-        ids.forEach((id) => {
-          const all = document.querySelectorAll(`#${id}`);
-          if (all && all.length > 1) {
-            for (let i = 1; i < all.length; i++) {
-              try { all[i].remove(); } catch (_) {}
-            }
-          }
-        });
-      } catch (_) {}
-
-      // Aggressive cleanup (only for navigation/hard reset): clear lingering overlays/toasts.
-      // Keep the main widget if possible to avoid visible flicker.
-      if (why === "navigate" || why === "hard") {
-        try {
-          const ui = document.querySelectorAll('[data-cansee="ui"]');
-          ui.forEach((n) => {
-            try {
-              const role = String(n?.dataset?.canseeRole || "");
-              if (role === "widget") return;
-              if (role === "ctx-banner") return;
-              // Remove anything else that might become a ghost layer.
-              n.remove();
-            } catch (_) {}
-          });
-        } catch (_) {}
-
-        // Also remove highlight/spotlight classes if they somehow remained.
-        try {
-          const arts = document.querySelectorAll('article.follone-danger, article.follone-spotlight-target');
-          arts.forEach((a) => {
-            try {
-              a.classList.remove("follone-danger", "follone-spotlight-target");
-              const b = a.querySelector?.('.follone-target-badge');
-              if (b) b.remove();
-            } catch (_) {}
-          });
-        } catch (_) {}
-      }
-
-      // Also prune cached post refs that are no longer connected.
-      if (state && state.elemById) {
-        for (const [id, el] of state.elemById.entries()) {
-          if (!el || !el.isConnected) state.elemById.delete(id);
-        }
-      }
-
-      pushEvent('cleanup', { reason: why });
-    } catch (_) {}
-  }
-
 
   function markChip(elem, label, kind) {
     try {
@@ -242,7 +158,6 @@
         bb = document.createElement("div");
         bb.className = "cansee-post-chip";
         bb.style.pointerEvents = "none";
-        tagInjected(bb, "post", "chip");
         // Ensure positioning context
         const st = getComputedStyle(host);
         if (st.position === "static") host.style.position = "relative";
@@ -696,7 +611,6 @@ function showCtxBanner() {
 
       const d = document.createElement("div");
       d.id = "follone-ctx-banner";
-      tagInjected(d, "ui", "ctx-banner");
       d.innerHTML = `
         <div class="ctxCard">
           <div class="ctxTitle">follone が更新されたみたい</div>
@@ -1460,7 +1374,6 @@ function openXSearch(q) {
     try {
       const bb = document.createElement("div");
       bb.className = "follone-target-badge";
-      tagInjected(bb, "post", "spotlight-badge");
       bb.textContent = `${String(cat || "")}${cat ? " / " : ""}${String(score ?? "")}`.trim();
       if (bb.textContent) elem.appendChild(bb);
     } catch (_) {}
@@ -1645,7 +1558,7 @@ function openXSearch(q) {
 
 
   
-  function showLoader(kind, metaLeft) {
+  function showLoader(kind, metaLeft, minMs) {
     let el = document.getElementById("follone-loader");
     if (!el) {
       try { mountUI(); } catch (_) {}
@@ -1659,7 +1572,7 @@ function openXSearch(q) {
     loader.minDone = false;
 
     // Time-based minimum duration (ms)
-    loader.durationMs = 5000;
+    loader.durationMs = Math.max(900, Number(minMs || 0) || 0);
     loader.startTs = Date.now();
 
     // Reset timers/raf
@@ -1672,7 +1585,7 @@ function openXSearch(q) {
 
     el.classList.add("show");
     lockScroll(true, document.querySelector("main") || document.querySelector("[role='main']") || document.body.firstElementChild);
-    setLoaderBrand(loader.kind === "boot" ? getChar().label : "Now analyzing");
+    setLoaderBrand(loader.kind === "boot" ? "CanSee" : "Now analyzing");
     setLoaderSubtitle(loader.kind === "boot" ? "起動中" : "Now analyzing");
     setLoaderQuote(loader.kind === "boot" ? "少しだけ…待ってて。" : "ちょい待ち。分析するね。");
 
@@ -1770,7 +1683,7 @@ function setLoaderProgress(progress) {
     bumpPageToken();
     resetLoaderGates();
 
-    showLoader(kind, metaLeft);
+    showLoader(kind, metaLeft, o.minMs);
 
     const token = loader.pageToken;
     const start = Date.now();
@@ -1817,6 +1730,19 @@ function setLoaderProgress(progress) {
 
     if (loader.pageToken != token) { try { clearInterval(_pump); } catch {} return; }
     try { clearInterval(_pump); } catch {}
+
+    // Tiny "ready" beat: give the user a satisfying handoff from loader -> UI.
+    try {
+      const el = document.getElementById("follone-loader");
+      if (el) el.classList.add("ready");
+      setLoaderBrand("CanSee");
+      setLoaderSubtitle("Let's enjoy!");
+      setLoaderQuote("準備できたよ。楽しもう。");
+      setLoaderProgress(1);
+      await new Promise(r => setTimeout(r, 650));
+      if (el) el.classList.remove("ready");
+    } catch (_) {}
+
     hideLoader();
     setTask("stand-by");
     scheduleHighlightFlush(0);
@@ -1845,7 +1771,6 @@ function setLoaderProgress(progress) {
     window.addEventListener("follone:navigate", () => {
       // Skip explore pages
       if (location.pathname.startsWith("/explore")) return;
-      try { cleanupInjectedOrphans("navigate"); } catch (_) {}
       // If a spotlight was open, always close it when navigating.
       // (Otherwise the side panel can remain stuck on the edge.)
       try { if (state.spotlightOpen) closeSpotlight("navigate"); } catch (_) {}
@@ -2023,7 +1948,6 @@ function installSearchLoaderHook() {
 
     const w = document.createElement("div");
     w.id = "follone-widget";
-    tagInjected(w, "ui", "widget");
     w.innerHTML = `
       <div class="device">
         <div class="deviceBody">
@@ -2108,7 +2032,6 @@ function installSearchLoaderHook() {
 
     const ov = document.createElement("div");
     ov.id = "follone-overlay";
-    tagInjected(ov, "ui", "overlay");
     ov.innerHTML = `
       <div class="card">
         <div class="cardHeader">
@@ -2136,7 +2059,6 @@ function installSearchLoaderHook() {
     if (!document.getElementById("follone-spotlight")) {
       const sp = document.createElement("div");
       sp.id = "follone-spotlight";
-      tagInjected(sp, "ui", "spotlight");
       sp.innerHTML = `
         <div class="veil" id="follone-sp-top"></div>
         <div class="veil" id="follone-sp-left"></div>
@@ -2169,7 +2091,6 @@ function installSearchLoaderHook() {
     if (!document.getElementById("follone-loader")) {
       const ld = document.createElement("div");
       ld.id = "follone-loader";
-      tagInjected(ld, "ui", "loader");
       ld.innerHTML = `
         <div class="box">
           <div class="brand" id="follone-loader-brand"></div>
@@ -2189,16 +2110,6 @@ function installSearchLoaderHook() {
     try { installTimelineWatcher(); } catch (_) {}
     try { installTimelineClickHook(); } catch (_) {}
     try { installSearchLoaderHook(); } catch (_) {}
-
-    // Sprint2: always cleanup injected per-post elements to avoid残骸 on SPA/virtualized timelines.
-    try {
-      if (!state._cleanupInterval) {
-        state._cleanupInterval = window.setInterval(() => {
-          try { cleanupInjectedOrphans("interval"); } catch (_) {}
-        }, 2500);
-      }
-      cleanupInjectedOrphans("mount");
-    } catch (_) {}
 
     w.querySelector("#follone-toggle").addEventListener("click", async () => {
       settings.enabled = !settings.enabled;
@@ -2604,7 +2515,6 @@ function installSearchLoaderHook() {
     if (article.querySelector?.('.follone-idtag')) return;
     const tag = document.createElement("div");
     tag.className = "follone-idtag";
-    tagInjected(tag, "post", "idtag");
     tag.textContent = id;
     // Do not disturb layout: overlay inside article
     try { article.style.position = article.style.position || "relative"; } catch (_) {}
@@ -3185,7 +3095,6 @@ const dt = Math.round(performance.now() - t0);
   // -----------------------------
   const BIAS_TZ = "Asia/Tokyo";
   const BIAS_STORAGE_KEY = "follone_biasAgg_v2";
-  const RISK_STORAGE_KEY = "follone_riskAgg_v1";
   const BIAS_TOPICS = [
     "社会",
     "政治",
@@ -3333,72 +3242,6 @@ const dt = Math.round(performance.now() - t0);
     scheduleBiasAggFlush();
   }
 
-
-
-  // -----------------------------
-  // Risk aggregation (v1) — for submission-grade Before/After
-  // -----------------------------
-  async function loadRiskAgg() {
-    try {
-      const obj = await chrome.storage.local.get([RISK_STORAGE_KEY]);
-      const cur = obj ? obj[RISK_STORAGE_KEY] : null;
-      if (cur && typeof cur === "object" && cur.day && typeof cur.day === "object") {
-        state.riskAgg = cur;
-      } else {
-        state.riskAgg = { tz: BIAS_TZ, day: {}, updatedAt: Date.now() };
-      }
-      state.riskDayKey = tokyoDayKey(Date.now());
-    } catch (_e) {
-      state.riskAgg = { tz: BIAS_TZ, day: {}, updatedAt: Date.now() };
-      state.riskDayKey = tokyoDayKey(Date.now());
-    }
-  }
-
-  function scheduleRiskAggFlush() {
-    if (!state.riskAgg || !state.riskAggDirty) return;
-    if (state.riskAggFlushTimer) return;
-    state.riskAggFlushTimer = setTimeout(async () => {
-      state.riskAggFlushTimer = 0;
-      if (!state.riskAggDirty || !state.riskAgg) return;
-      state.riskAggDirty = false;
-      state.riskAgg.updatedAt = Date.now();
-      try {
-        await chrome.storage.local.set({ [RISK_STORAGE_KEY]: state.riskAgg });
-      } catch (_e) {
-        // silent
-      }
-    }, 900);
-  }
-
-  function pruneRiskDays(maxDays = 420) {
-    if (!state.riskAgg || !state.riskAgg.day) return;
-    const keys = Object.keys(state.riskAgg.day).sort();
-    if (keys.length <= maxDays) return;
-    const drop = keys.slice(0, Math.max(0, keys.length - maxDays));
-    for (const k of drop) delete state.riskAgg.day[k];
-  }
-
-  function bumpRiskAgg(result) {
-    try {
-      if (!state.riskAgg) return;
-      const dayKey = tokyoDayKey(Date.now());
-      if (dayKey !== state.riskDayKey) state.riskDayKey = dayKey;
-
-      const r = result || {};
-      const cat = String(r.riskCategory || "なし");
-      const score = Number(r.riskScore || 0);
-      const isDanger = (cat && cat !== "なし") || score >= 50;
-
-      const day = state.riskAgg.day[dayKey] || (state.riskAgg.day[dayKey] = { total: 0, danger: 0, cats: {} });
-      day.total = Number(day.total || 0) + 1;
-      if (isDanger) day.danger = Number(day.danger || 0) + 1;
-      if (cat) day.cats[cat] = Number(day.cats[cat] || 0) + 1;
-
-      state.riskAggDirty = true;
-      pruneRiskDays(420);
-      scheduleRiskAggFlush();
-    } catch (_e) {}
-  }
   function normalizedEntropyFromMap(countsMap, total, nAll) {
     const n = Math.max(2, Number(nAll || 0) || countsMap.size || 2);
     if (total <= 0) return 0;
@@ -3553,7 +3396,6 @@ const dt = Math.round(performance.now() - t0);
     const toast = document.createElement("div");
     toast.id = "follone-toast";
     toast.className = "follone-toast";
-    tagInjected(toast, "ui", "toast");
     toast.innerHTML = `
       <div class="ft-head">
         <div class="ft-title">視野が偏り気味</div>
@@ -4082,9 +3924,6 @@ function choosePriorityBatch(maxN) {
         const topic = String(r.topicCategory || "その他");
         updateTopicStats(topic);
 
-        // Risk agg for ARTICLE (danger rate)
-        try { bumpRiskAgg(r); } catch (_e) {}
-
         // If this element is currently fully visible, apply decorations now
         if (isFullyVisible(elem)) {
           maybeApplyResultToElement(elem, r, { from: "analyzePump" });
@@ -4599,7 +4438,6 @@ function maybeApplyResultToElement(elem, res, ctx) {
     await loadUiPrefs();
     bindEquipStorageListener();
     await loadBiasAgg();
-    await loadRiskAgg();
     await loadResultCache();
     log("info","[SETTINGS]","loaded", { enabled: settings.enabled, aiMode: settings.aiMode, debug: settings.debug, logLevel: settings.logLevel, batchSize: settings.batchSize, idleMs: settings.idleMs });
     mountUI();
