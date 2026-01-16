@@ -322,6 +322,14 @@
     btnTutorial: $('#btnTutorial'),
     tutorialState: $('#tutorialState'),
     btnResetOnboarding: $('#btnReset'),
+    onbBanner: $('#onbBanner'),
+    onbText: $('#onbText'),
+    onbStartTutorial: $('#onbStartTutorial'),
+    onbSkip: $('#onbSkip'),
+    onbModal: $('#onbModal'),
+    btnCloseOnb: $('#btnCloseOnb'),
+    btnOnbStart: $('#btnOnbStart'),
+    btnOnbLater: $('#btnOnbLater'),
 
     // next action
     nextText: $('#nextText'),
@@ -2629,28 +2637,97 @@ function renderAccessorySelects() {
     });
   }
 
-
   function bindTutorial() {
     // Keep this super robust: always open tutorial.html via runtime URL.
-    const updateState = async () => {
-      try {
-        const r = await chrome.storage.local.get(['follone_onboarding_done','follone_onboarding_state','follone_onboarding_phase']);
-        const done = !!r.follone_onboarding_done || r.follone_onboarding_state === 'completed' || r.follone_onboarding_phase === 'done';
-        if (dom.tutorialState) dom.tutorialState.textContent = done ? 'done' : 'not started';
-        if (dom.btnTutorial) dom.btnTutorial.textContent = done ? 'REOPEN' : 'START';
-      } catch (_e) {
-        if (dom.tutorialState) dom.tutorialState.textContent = 'unknown';
-      }
-    };
-
-    if (dom.btnTutorial) dom.btnTutorial.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
+    const openTutorial = async () => {
       try {
         const url = chrome.runtime.getURL('tutorial.html');
         await chrome.tabs.create({ url });
       } catch (err) {
         console.warn('[options] tutorial open failed', err);
       }
+    };
+
+    const openOnbModal = () => {
+      if (!dom.onbModal) return;
+      dom.onbModal.classList.add('is-open');
+      document.body.classList.add('hb-modalOpen');
+      dom.onbModal.setAttribute('aria-hidden', 'false');
+    };
+
+    const closeOnbModal = () => {
+      if (!dom.onbModal) return;
+      dom.onbModal.classList.remove('is-open');
+      document.body.classList.remove('hb-modalOpen');
+      dom.onbModal.setAttribute('aria-hidden', 'true');
+    };
+
+    const updateOnbUI = async () => {
+      let done = false;
+      try {
+        const r = await chrome.storage.local.get([
+          'follone_onboarding_done',
+          'follone_onboarding_state',
+          'follone_onboarding_phase',
+          'follone_onboarding_seen'
+        ]);
+        done = !!r.follone_onboarding_done || r.follone_onboarding_state === 'completed' || r.follone_onboarding_phase === 'done';
+
+        // Banner stays visible until done.
+        if (dom.onbBanner) dom.onbBanner.hidden = done;
+        if (dom.tutorialState) dom.tutorialState.textContent = done ? 'done' : 'not started';
+        if (dom.btnTutorial) dom.btnTutorial.textContent = done ? 'REOPEN' : 'START';
+
+        // First-time welcome modal: show once per profile until user dismisses.
+        const seen = !!r.follone_onboarding_seen;
+        if (!done && !seen) {
+          try { await chrome.storage.local.set({ follone_onboarding_seen: true }); } catch (_e) {}
+          openOnbModal();
+        }
+      } catch (_e) {
+        if (dom.tutorialState) dom.tutorialState.textContent = 'unknown';
+      }
+      return done;
+    };
+
+    // Banner buttons
+    if (dom.onbStartTutorial) dom.onbStartTutorial.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      await openTutorial();
+    });
+    if (dom.onbSkip) dom.onbSkip.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (dom.onbBanner) dom.onbBanner.hidden = true;
+      speak('OK。上のバナーからいつでも開始できるよ。', (app.data.characterId || 'PET').toUpperCase());
+    });
+
+    // Modal buttons
+    if (dom.btnOnbStart) dom.btnOnbStart.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeOnbModal();
+      await openTutorial();
+    });
+    if (dom.btnOnbLater) dom.btnOnbLater.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeOnbModal();
+      speak('OK。上のバナーからいつでも開始できるよ。', (app.data.characterId || 'PET').toUpperCase());
+    });
+    if (dom.btnCloseOnb) dom.btnCloseOnb.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeOnbModal();
+    });
+    // backdrop click
+    if (dom.onbModal) {
+      dom.onbModal.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t && t.getAttribute && t.getAttribute('data-close') === '1') closeOnbModal();
+      });
+    }
+
+    // Settings card buttons (START/RESET)
+    if (dom.btnTutorial) dom.btnTutorial.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      await openTutorial();
     });
 
     if (dom.btnResetOnboarding) dom.btnResetOnboarding.addEventListener('click', async (e) => {
@@ -2663,7 +2740,7 @@ function renderAccessorySelects() {
           follone_onboarding_state: 'not_started',
           follone_onboarding_phase: 'start'
         });
-        await updateState();
+        await updateOnbUI();
         speak('リセットしたよ。STARTで再開してね。', (app.data.characterId || 'PET').toUpperCase());
       } catch (_e) {
         alert('リセットに失敗した…');
@@ -2671,11 +2748,11 @@ function renderAccessorySelects() {
     });
 
     // initial render + keep in sync
-    updateState();
+    updateOnbUI();
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
-        if (changes.follone_onboarding_done || changes.follone_onboarding_state || changes.follone_onboarding_phase) updateState();
+        if (changes.follone_onboarding_done || changes.follone_onboarding_state || changes.follone_onboarding_phase) updateOnbUI();
       });
     } catch (_e) {}
   }

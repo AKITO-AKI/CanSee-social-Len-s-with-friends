@@ -344,3 +344,10 @@ body {
     0 10px 30px rgba(40, 26, 72, .08),
     inset 0 1px 0 rgba(255,255,255,.85);
 }
+
+
+/* Step transitions */
+.tGuide.isFlash{animation:tFlash 420ms ease-out;}
+@keyframes tFlash{0%{transform:translateY(0) scale(1);box-shadow:0 16px 32px rgba(90,40,150,0.18);}35%{transform:translateY(-2px) scale(1.01);box-shadow:0 22px 46px rgba(90,40,150,0.22);}100%{transform:translateY(0) scale(1);box-shadow:0 16px 32px rgba(90,40,150,0.18);}}
+.tOverlayDemo.isPop{animation:tPop 460ms cubic-bezier(.2,.8,.2,1);} 
+@keyframes tPop{0%{transform:translateY(2px) scale(.985);opacity:.92;}55%{transform:translateY(0) scale(1.01);opacity:1;}100%{transform:translateY(0) scale(1);opacity:1;}}

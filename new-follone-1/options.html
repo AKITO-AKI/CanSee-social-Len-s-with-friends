@@ -118,14 +118,6 @@
 </div>
 </div>
 
-<div class="hb-biasMeta">
-  <div class="hb-mini" id="periodNote">--</div>
-  <div class="hb-biasMeta__right">
-    <div class="hb-mini hb-muted" id="biasUpdated">updated: --</div>
-    <button class="hb-btn hb-btn--sm" id="btnBiasRefresh" type="button">REFRESH</button>
-  </div>
-</div>
-
 <!-- PURPLE: Bias deep evaluation / explanation -->
 <div class="hb-biasDetail">
   <div class="hb-card hb-card--wide">
@@ -613,6 +605,33 @@
   <!-- Tooltip -->
   <div id="hbTooltip" class="hb-tooltip" role="tooltip" aria-hidden="true"></div>
 
+
+
+
+
+<!-- Onboarding Welcome Modal (first time only) -->
+<div class="hb-modal" id="onbModal" aria-hidden="true">
+  <div class="hb-modal__backdrop" data-close="1"></div>
+  <div class="hb-modal__panel hb-onbModal" role="dialog" aria-modal="true" aria-label="初回セットアップ">
+    <div class="hb-modal__hd">
+      <div class="hb-modal__title">WELCOME</div>
+      <button class="hb-iconBtn" id="btnCloseOnb" aria-label="閉じる">✕</button>
+    </div>
+    <div class="hb-onbModal__bd">
+      <div class="hb-onbModal__lead">1分で体験できるように整えてるよ。まずは流れだけ掴もう。</div>
+      <ol class="hb-onbSteps">
+        <li><b>設定</b>：AIの準備（学校PCでもOK）</li>
+        <li><b>TUTORIAL</b>：練習用タイムラインで体験</li>
+        <li><b>Xへ</b>：Overlayが起動してチップが動く</li>
+      </ol>
+      <div class="hb-row hb-row--center" style="margin-top:14px">
+        <button class="hb-btn hb-btn--pri hb-btn--xl" id="btnOnbStart" type="button">TUTORIALを始める</button>
+        <button class="hb-btn" id="btnOnbLater" type="button">後でやる</button>
+      </div>
+      <div class="hb-mini hb-mini--muted" style="margin-top:10px">※あとでやるを押しても、上のバナーからいつでも開始できます。</div>
+    </div>
+  </div>
+</div>
 
 
 <!-- Character Slot Modal (full-screen) -->

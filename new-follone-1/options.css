@@ -576,11 +576,6 @@ body::after{
 
 .hb-biasDetail{display:grid; grid-template-columns:1fr; gap:12px; margin-top:14px;}
 
-/* --- Bias: live meta line (period note + refresh) --- */
-.hb-biasMeta{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; padding:10px 12px; border-radius:14px; background:rgba(255,255,255,.55); box-shadow:0 8px 20px rgba(20,30,60,.08); backdrop-filter:blur(10px);}
-.hb-biasMeta__right{display:flex; align-items:center; gap:10px;}
-
-
 /* Quest lists */
 .hb-list{margin:0; padding-left:18px;}
 .hb-list li{margin:6px 0; color:rgba(40,20,60,.72);}
@@ -1669,3 +1664,12 @@ body.hb-modalOpen{overflow:hidden;}
   background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,.38));
   box-shadow: 0 16px 28px rgba(70,25,130,.12), inset 0 0 0 1px rgba(180,140,255,.25);
 }
+
+
+/* Onboarding Welcome Modal */
+.hb-onbModal{width:min(820px,92vw);height:auto;min-height:340px;}
+.hb-onbModal__bd{padding:14px 16px 18px;}
+.hb-onbModal__lead{font-weight:800;letter-spacing:.02em;color:rgba(30,22,44,0.86);}
+.hb-onbSteps{margin:12px 0 0;padding:0 0 0 18px;color:rgba(30,22,44,0.84);}
+.hb-onbSteps li{margin:8px 0;line-height:1.45;}
+.hb-onbSteps b{color:rgba(var(--accentRGB),0.95);}

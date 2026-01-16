@@ -240,154 +240,192 @@ async function enterFreeplay(){
 }
 
 async function main(){
-  // Tutorial spec (Phase11): navigator style, no character branching.
-  // - Chapter 1: Overlay panel explanation
-  // - Chapter 2: danger post demo (Spotlight)
-  // - Chapter 3: recovery / troubleshooting
+  // Phase12: 5-step tutorial (fast + satisfying)
+  const STEPS = [
+    { id:1, title:'WELCOME', hint:'準備と全体像' },
+    { id:2, title:'Overlay', hint:'見方とチップ' },
+    { id:3, title:'Spotlight', hint:'介入UI体験' },
+    { id:4, title:'LEVEL', hint:'XPと解放' },
+    { id:5, title:'FINISH', hint:'始めよう' },
+  ];
 
-  // Keep avatar optional, but narration is always "ナビ"
-  setText($("guideChar"), "ナビ");
-
-  // Initial HUD
-  const p = await getProgress();
-  setText($("hudLv"), p.level || 1);
-  setText($("hudXp"), p.xp || 0);
-  setText($("hudGain"), 0);
-
-  // Start AI setup (model download / warm session) in background
-  startAiPrepare({ poll:true }).catch(() => {});
-
-  // Render guide avatar (best-effort: selected character)
-  let charId = "follone";
+  // Decide narrator character (best-effort: selected character)
+  let charId = 'follone';
   try {
-    const cur = await chrome.storage.local.get(["follone_characterId"]);
-    charId = normalizeCharId(cur.follone_characterId);
+    const cur = await chrome.storage.local.get(["cansee_selected_character_id","follone_characterId","characterId","selectedCharacterId"]);
+    const pick = cur.cansee_selected_character_id || cur.follone_characterId || cur.characterId || cur.selectedCharacterId;
+    charId = normalizeCharId(String(pick || 'follone'));
   } catch (_e) {}
+  window.__tutorialCharId = charId;
+  setText($('guideChar'), charName(charId));
   loadGuideAvatar(charId);
 
-  const chapters = [
-    { id:1, title:"Overlayの見方", hint:"状態とゲージの読み方" },
-    { id:2, title:"危険投稿のデモ", hint:"Spotlightを体験" },
-    { id:3, title:"困った時の復旧", hint:"止まった時の手順" },
-  ];
+  // Initial HUD
+  const p0 = await getProgress();
+  setText($('hudLv'), p0.level || 1);
+  setText($('hudXp'), p0.xp || 0);
+  setText($('hudGain'), 0);
+
+  // Start AI setup in background (do not block steps)
+  startAiPrepare({ poll:true }).catch(() => {});
 
   const visited = new Set();
   let current = 1;
 
-  const setProgress = (ch) => {
-    const idx = chapters.findIndex(c => c.id === ch);
-    const label = $("progLabel");
-    const hint = $("progHint");
-    const fill = $("progFill");
-    const bar = document.querySelector(".tProgBar");
-    if (label) label.textContent = `CHAPTER ${idx+1}/${chapters.length}`;
-    if (hint) hint.textContent = chapters[idx]?.hint || "";
-    const pct = ((idx+1) / chapters.length) * 100;
+  const setProgress = (step) => {
+    const idx = STEPS.findIndex(s => s.id === step);
+    const label = $('progLabel');
+    const hint = $('progHint');
+    const fill = $('progFill');
+    const bar = document.querySelector('.tProgBar');
+
+    if (label) label.textContent = `STEP ${idx+1}/${STEPS.length}`;
+    if (hint) hint.textContent = STEPS[idx]?.hint || '';
+    const pct = ((idx+1) / STEPS.length) * 100;
     if (fill) fill.style.width = `${pct}%`;
-    if (bar) bar.setAttribute("aria-valuenow", String(idx+1));
+    if (bar) bar.setAttribute('aria-valuenow', String(idx+1));
 
     // Nav buttons
-    chapters.forEach(c => {
-      const n = $("nav" + c.id);
+    STEPS.forEach(s => {
+      const n = $('nav' + s.id);
       if (!n) return;
-      n.classList.toggle("isActive", c.id === ch);
-      n.classList.toggle("isDone", visited.has(c.id) && c.id !== ch);
+      n.classList.toggle('isActive', s.id === step);
+      n.classList.toggle('isDone', visited.has(s.id) && s.id !== step);
     });
   };
 
-  const goto = async (ch) => {
-    current = ch;
-    setProgress(ch);
-    visited.add(ch);
+  const flash = () => {
+    const card = $('guideCard');
+    if (!card) return;
+    card.classList.remove('isFlash');
+    void card.offsetWidth;
+    card.classList.add('isFlash');
+  };
 
-    // Clear target highlights
-    $("postHot")?.classList.remove("isTarget");
+  const goto = async (step) => {
+    current = step;
+    visited.add(step);
+    setProgress(step);
+    flash();
 
-    if (ch === 1) {
-      document.getElementById("overlayDemo")?.scrollIntoView({ behavior:"smooth", block:"start" });
-      setActions([mkBtn("次へ")]);
+    // Clear targets
+    $('postHot')?.classList.remove('isTarget');
+
+    // STEP 1: Welcome
+    if (step === 1) {
+      document.getElementById('overlayDemo')?.scrollIntoView({ behavior:'smooth', block:'start' });
       await say([
-        "まずはOverlayの見方だよ。",
-        "上の“状態”は、今のタイムラインがどんな雰囲気かを表す。",
-        "下の3本ゲージは Focus / Variety / Explore。",
-        "Varietyが低いと、同じ話題が続いてるサイン。",
-        "ここで“気づける”だけでも十分なんだ。",
+        `やあ。${charName(charId)}だよ。`,
+        'ここは練習用のTUTORIAL。',
+        'まずはAIの準備を始めて、全体像をつかもう。',
+        '右の数字(1〜5)で、いつでも戻れるよ。',
       ]);
-      await new Promise(r => $("guideActions")?.firstChild?.addEventListener("click", r, { once:true }));
-      return await goto(2);
+      const b = mkBtn('次へ');
+      setActions([b]);
+      await new Promise(r => b.addEventListener('click', r, { once:true }));
+      return goto(2);
     }
 
-    if (ch === 2) {
-      const btn = mkBtn("Spotlightを体験する");
-      setActions([btn, mkBtn("戻る", { kind:"ghost" })]);
-      const ghost = $("guideActions")?.lastChild;
-      ghost?.addEventListener("click", () => goto(1), { once:true });
-
-      $("postHot")?.classList.add("isTarget");
-      $("postHot")?.scrollIntoView({ behavior:"smooth", block:"center" });
-      await sleep(180);
+    // STEP 2: Overlay basics
+    if (step === 2) {
+      document.getElementById('overlayDemo')?.classList.add('isPop');
+      await sleep(120);
       await say([
-        "次は“危険投稿”のデモ。",
-        "感情が強くなりそうな投稿ではSpotlightを出して、選択肢を作る。",
-        "“戻る”=距離を取る / “検索する”=別の視点を見る。",
-        "どっちでもOK。ここでは練習だから、押したら閉じるだけ。",
+        'Overlayは「今のタイムラインの偏り」を見るための窓。',
+        'Focus: 同じ話題に偏りすぎてない？',
+        'Variety: 話題の幅はある？',
+        'Explore: 新しい視点を取りに行けてる？',
+        '投稿にはチップが出て、queued→processing→done で動くよ。',
       ]);
+      const bPrev = mkBtn('戻る', { kind:'ghost' });
+      const bNext = mkBtn('次へ');
+      setActions([bPrev, bNext]);
+      bPrev.addEventListener('click', () => goto(1), { once:true });
+      await new Promise(r => bNext.addEventListener('click', r, { once:true }));
+      return goto(3);
+    }
 
-      await new Promise(r => btn.addEventListener("click", r, { once:true }));
+    // STEP 3: Spotlight demo
+    if (step === 3) {
+      $('postHot')?.classList.add('isTarget');
+      $('postHot')?.scrollIntoView({ behavior:'smooth', block:'center' });
+      await sleep(160);
+      await say([
+        '次はSpotlight。',
+        '感情が強くなりそうな投稿で、いったん選択肢を増やす。',
+        'どちらを押してもOK。ここでは練習！',
+      ]);
+      const bDo = mkBtn('Spotlightを体験');
+      const bPrev = mkBtn('戻る', { kind:'ghost' });
+      setActions([bPrev, bDo]);
+      bPrev.addEventListener('click', () => goto(2), { once:true });
+      await new Promise(r => bDo.addEventListener('click', r, { once:true }));
       const { choice } = await showSpotlightOnce({ allowXp:true });
       await say([
-        choice === "search" ? "視点を増やす選択、すごく良い。" : "距離を取る選択、すごく良い。",
-        "この“落ち着いた選択”がXPになる。",
+        choice === 'search' ? '視点を増やす選択、ナイス。' : '距離を取る選択、ナイス。',
+        'この「落ち着いた選択」がXPになる。',
       ]);
-
-      setActions([mkBtn("次へ")]);
-      await new Promise(r => $("guideActions")?.firstChild?.addEventListener("click", r, { once:true }));
-      return await goto(3);
+      const bNext = mkBtn('次へ');
+      setActions([bNext]);
+      await new Promise(r => bNext.addEventListener('click', r, { once:true }));
+      return goto(4);
     }
 
-    // Chapter 3: recovery
-    setActions([mkBtn("Optionsを開く", { kind:"ghost" }), mkBtn("終了（Xへ戻る)" )]);
-    const bOpen = $("guideActions")?.firstChild;
-    const bEnd = $("guideActions")?.lastChild;
+    // STEP 4: Level / XP
+    if (step === 4) {
+      const prog = await getProgress();
+      setText($('hudLv'), prog.level || 1);
+      setText($('hudXp'), prog.xp || 0);
+      await say([
+        'LV/XPは「良い使い方ができた回数」の目安。',
+        'Focusが高すぎると、XPが少し減衰することもあるよ。',
+        'GAMEタブで、解放（ティア）を眺められる。',
+      ]);
+      const bPrev = mkBtn('戻る', { kind:'ghost' });
+      const bNext = mkBtn('次へ');
+      setActions([bPrev, bNext]);
+      bPrev.addEventListener('click', () => goto(3), { once:true });
+      await new Promise(r => bNext.addEventListener('click', r, { once:true }));
+      return goto(5);
+    }
 
-    bOpen?.addEventListener("click", async () => {
-      try { await chrome.runtime.openOptionsPage(); } catch (_e) {}
-    });
-    bEnd?.addEventListener("click", async () => {
-      await markOnboardingDone();
-      try { window.close(); } catch(_e) {}
-    }, { once:true });
-
+    // STEP 5: Finish
     await say([
-      "最後に、困った時の復旧手順。",
-      "① まずはAIチップを見る（PREP/READY/OFF）。",
-      "② READYなのに動かない時は、Settingsで“Reset backend”を実行。",
-      "③ それでもダメならページをリロード。",
-      "（ログはLogsページからコピーして報告できるよ）",
+      '準備OK。最後に「戻り方」と「困った時」。',
+      '① HOME BASE(Options) → PREPARE / WARMUP',
+      '② 動かない時 → RESET BACKEND',
+      '③ それでもダメならページをリロード',
+      'じゃあ、行こう。',
     ]);
 
-    // Optional freeplay after reading
-    const btnMore = mkBtn("練習を続ける");
-    setActions([btnMore, mkBtn("終了（Xへ戻る)")]);
-    const btnEnd2 = $("guideActions")?.lastChild;
-    btnEnd2?.addEventListener("click", async () => {
-      await markOnboardingDone();
-      try { window.close(); } catch(_e) {}
+    await markOnboardingDone();
+
+    const bHome = mkBtn('HOME BASEへ戻る');
+    const bX = mkBtn('Xを開く', { kind:'ghost' });
+    setActions([bHome, bX]);
+
+    bHome.addEventListener('click', async () => {
+      try { await chrome.runtime.openOptionsPage(); } catch (_e) {}
     }, { once:true });
 
-    await new Promise(r => btnMore.addEventListener("click", r, { once:true }));
-    await enterFreeplay();
+    bX.addEventListener('click', async () => {
+      try {
+        const url = 'https://x.com/home';
+        await chrome.tabs.create({ url });
+      } catch (_e) {}
+    }, { once:true });
   };
 
-  // Wire nav
-  chapters.forEach(c => {
-    const n = $("nav" + c.id);
-    n?.addEventListener("click", () => goto(c.id));
+  // Nav wiring
+  STEPS.forEach(s => {
+    const n = $('nav' + s.id);
+    n?.addEventListener('click', () => goto(s.id));
   });
 
   setProgress(1);
   await goto(1);
 }
+
 
 main().catch((e) => {
   console.error(e);
