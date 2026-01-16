@@ -318,19 +318,6 @@
     btnPrompt: $('#btnPrompt'),
     btnWarmup: $('#btnWarmup'),
 
-    // onboarding / tutorial
-    btnTutorial: $('#btnTutorial'),
-    tutorialState: $('#tutorialState'),
-    btnResetOnboarding: $('#btnReset'),
-    onbBanner: $('#onbBanner'),
-    onbText: $('#onbText'),
-    onbStartTutorial: $('#onbStartTutorial'),
-    onbSkip: $('#onbSkip'),
-    onbModal: $('#onbModal'),
-    btnCloseOnb: $('#btnCloseOnb'),
-    btnOnbStart: $('#btnOnbStart'),
-    btnOnbLater: $('#btnOnbLater'),
-
     // next action
     nextText: $('#nextText'),
 
@@ -762,7 +749,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
 
     if (dom.btnBack) dom.btnBack.classList.toggle('is-on', view !== 'home');
 
-    const titleMap = { home: 'HOME', bias: 'BIAS', quest: 'QUEST', log: 'LOG', settings: 'SETTINGS', rpg: 'GAME', dev: 'DEV' };
+    const titleMap = { home: 'HOME', bias: 'BIAS', quest: 'QUEST', log: 'LOG', settings: 'SETTINGS', rpg: 'GAME', article: 'ARTICLE', dev: 'DEV' };
     if (dom.mainTitle) dom.mainTitle.textContent = titleMap[view] || String(view || 'HOME');
 
     // Hint text per view
@@ -773,12 +760,14 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
       quest: 'Daily / Weekly の進捗。',
       log: 'Spotlightの理由 / 偏りの原因候補 / EXP減衰理由。',
       settings: '基本設定（学校運用向け）。',
-      rpg: '成長・解放要素（準備中）。'
+      rpg: '成長・解放要素（準備中）。',
+      article: '提出用の本文（図表つき）。目次からジャンプできる。'
     };
     if (dom.mainHint) dom.mainHint.textContent = hintMap[view] || '';
     if (view === 'dev') { const t = document.querySelector('.hb-tab--dev'); if (t) t.hidden = false; }
     if (view === 'dev') renderDev();
     if (view === 'log') renderLog();
+    if (view === 'article') renderArticle();
   }
 
   function setTag(el, text, state) {
@@ -1049,6 +1038,356 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
       li.appendChild(tag);
       list.appendChild(li);
     }
+  }
+
+  // -----------------------------
+  // Sprint3: ARTICLE (submission)
+  // -----------------------------
+  const ARTICLE_DATA = {
+    jpYouth2023_minutes: {
+      // 平日1日あたり／利用機器合計（令和5年度）
+      elem: 226.3,
+      jhs: 282.1,
+      hs: 374.2
+    },
+    hsTrend_minutes: [
+      { year: '2021', v: 330.7 },
+      { year: '2022', v: 345.0 },
+      { year: '2023', v: 374.2 }
+    ],
+    usTeenSocialHours: {
+      label: 'Gallup 2023',
+      hours: 4.8
+    }
+  };
+
+  function renderArticle() {
+    // build TOC (once)
+    const toc = document.getElementById('articleToc');
+    const body = document.getElementById('articleBody');
+    if (toc && body && !toc.dataset.built) {
+      toc.textContent = '';
+      const secs = [...body.querySelectorAll('.hb-articleSec')];
+      for (const sec of secs) {
+        const h = sec.querySelector('h3');
+        if (!h) continue;
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = `#${sec.id}`;
+        a.textContent = h.textContent.trim();
+        a.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        li.appendChild(a);
+        toc.appendChild(li);
+      }
+      toc.dataset.built = '1';
+    }
+
+    // draw charts
+    drawBarMinutes('artC1', [
+      { label: '小学生(10歳以上)', minutes: ARTICLE_DATA.jpYouth2023_minutes.elem },
+      { label: '中学生', minutes: ARTICLE_DATA.jpYouth2023_minutes.jhs },
+      { label: '高校生', minutes: ARTICLE_DATA.jpYouth2023_minutes.hs }
+    ]);
+
+    drawLineMinutes('artC2', ARTICLE_DATA.hsTrend_minutes);
+    drawSingleBarHours('artC3', ARTICLE_DATA.usTeenSocialHours);
+
+    // Figure 4: real user data (last 30 days) from BiasAgg
+    drawUserBiasSummary('artC4');
+
+    // citations: smooth jump + highlight
+    bindArticleCitations();
+  }
+
+  function bindArticleCitations() {
+    const root = document.querySelector('[data-view="article"]');
+    if (!root) return;
+    if (root.dataset.citeBound === '1') return;
+    root.dataset.citeBound = '1';
+
+    root.addEventListener('click', (ev) => {
+      const a = ev.target?.closest?.('a.hb-cite');
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (!href.startsWith('#')) return;
+      const id = href.slice(1);
+      const target = document.getElementById(id);
+      if (!target) return;
+      ev.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // highlight
+      target.classList.remove('is-flash');
+      // force reflow
+      void target.offsetWidth;
+      target.classList.add('is-flash');
+      window.setTimeout(() => target.classList.remove('is-flash'), 1200);
+    }, { passive: false });
+  }
+
+  function drawUserBiasSummary(canvasId) {
+    const agg = app?.data?.biasAgg || null;
+    const dayMap = agg?.dayMap || agg?.days || null;
+    const periodAgg = aggByPeriod(dayMap, 'month');
+
+    const f = Number(periodAgg?.counts?.focus || 0);
+    const v = Number(periodAgg?.counts?.variety || 0);
+    const e = Number(periodAgg?.counts?.explore || 0);
+    const total = Math.max(0, f + v + e);
+
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+
+      if (!total) {
+        ctx.globalAlpha = 0.85;
+        ctx.font = '14px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('まだデータがありません（BIASが増えるとここに表示されます）', w/2, h/2);
+        ctx.globalAlpha = 1;
+        return;
+      }
+
+      // Layout
+      const pad = 28;
+      const innerW = w - pad*2;
+      const innerH = h - pad*2;
+
+      // title
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.globalAlpha = 0.72;
+      ctx.fillText(`直近30日（記録日数: ${periodAgg?.range?.days || 0}日）`, pad, 10);
+      ctx.globalAlpha = 1;
+
+      // Bars
+      const rows = [
+        { k: 'Focus', n: f, hint: '偏り（1位の比率）' },
+        { k: 'Variety', n: v, hint: '多様性（エントロピー）' },
+        { k: 'Explore', n: e, hint: '探索（出現トピック数）' },
+      ];
+      const max = Math.max(...rows.map(r => r.n)) * 1.15;
+      const barH = Math.max(18, Math.min(28, Math.floor(innerH / (rows.length + 1))));
+      const gapY = 18;
+      let y = pad + 28;
+
+      rows.forEach((r) => {
+        const bw = max ? (innerW * (r.n / max)) : 0;
+        // glass bar
+        const grad = ctx.createLinearGradient(pad, y, pad + bw, y);
+        grad.addColorStop(0, 'rgba(180,140,255,.55)');
+        grad.addColorStop(1, 'rgba(120,80,200,.14)');
+        ctx.fillStyle = grad;
+        roundRect(ctx, pad, y, bw, barH, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(160,120,255,.28)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, pad, y, bw, barH, 10);
+        ctx.stroke();
+
+        // label + value
+        ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = 'rgba(60,40,110,.92)';
+        ctx.fillText(`${r.k}`, pad, y - 3);
+
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha = 0.86;
+        ctx.fillText(String(r.n), pad + Math.max(bw, 90), y + barH/2);
+        ctx.globalAlpha = 1;
+
+        // hint
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.globalAlpha = 0.65;
+        ctx.fillText(r.hint, pad, y + barH + 4);
+        ctx.globalAlpha = 1;
+
+        y += barH + gapY;
+      });
+    });
+  }
+
+  function with2d(id, fn) {
+    const c = document.getElementById(id);
+    if (!c) return;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const w = c.getAttribute('width') ? Number(c.getAttribute('width')) : c.clientWidth;
+    const h = c.getAttribute('height') ? Number(c.getAttribute('height')) : c.clientHeight;
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+    c.style.width = `${w}px`;
+    c.style.height = `${h}px`;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fn(ctx, w, h);
+  }
+
+  function drawAxes(ctx, w, h, pad) {
+    ctx.globalAlpha = 0.65;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad, pad);
+    ctx.lineTo(pad, h - pad);
+    ctx.lineTo(w - pad, h - pad);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBarMinutes(canvasId, rows) {
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      const pad = 28;
+      drawAxes(ctx, w, h, pad);
+
+      const max = Math.max(...rows.map(r => r.minutes)) * 1.15;
+      const innerW = w - pad*2;
+      const innerH = h - pad*2;
+      const barW = innerW / rows.length * 0.62;
+      const gap = innerW / rows.length;
+
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      rows.forEach((r, i) => {
+        const x = pad + gap*i + (gap - barW)/2;
+        const bh = Math.round((r.minutes / max) * innerH);
+        const y = (h - pad) - bh;
+
+        // bar (soft glass)
+        ctx.globalAlpha = 0.9;
+        const grad = ctx.createLinearGradient(0, y, 0, y + bh);
+        grad.addColorStop(0, 'rgba(180,140,255,.55)');
+        grad.addColorStop(1, 'rgba(120,80,200,.18)');
+        ctx.fillStyle = grad;
+        roundRect(ctx, x, y, barW, bh, 10);
+        ctx.fill();
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = 'rgba(160,120,255,.35)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, x, y, barW, bh, 10);
+        ctx.stroke();
+
+        // value
+        ctx.globalAlpha = 0.92;
+        ctx.fillStyle = 'rgba(60,40,110,.9)';
+        ctx.fillText(`${Math.round(r.minutes)}分`, x + barW/2, y - 6);
+
+        // label
+        ctx.globalAlpha = 0.78;
+        ctx.textBaseline = 'top';
+        ctx.fillText(r.label, x + barW/2, h - pad + 6);
+        ctx.textBaseline = 'bottom';
+      });
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawLineMinutes(canvasId, points) {
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      const pad = 28;
+      drawAxes(ctx, w, h, pad);
+
+      const max = Math.max(...points.map(p => p.v)) * 1.15;
+      const min = 0;
+      const innerW = w - pad*2;
+      const innerH = h - pad*2;
+
+      const xs = points.map((p, i) => pad + (innerW * (i/(points.length-1 || 1))));
+      const ys = points.map(p => (h - pad) - ((p.v - min) / (max - min || 1)) * innerH);
+
+      // area
+      ctx.beginPath();
+      ctx.moveTo(xs[0], h - pad);
+      for (let i = 0; i < points.length; i++) ctx.lineTo(xs[i], ys[i]);
+      ctx.lineTo(xs[xs.length-1], h - pad);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+      grad.addColorStop(0, 'rgba(180,140,255,.40)');
+      grad.addColorStop(1, 'rgba(120,80,200,.08)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // line
+      ctx.strokeStyle = 'rgba(120,80,200,.65)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xs[0], ys[0]);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(xs[i], ys[i]);
+      ctx.stroke();
+
+      // points + labels
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      for (let i = 0; i < points.length; i++) {
+        ctx.fillStyle = 'rgba(255,255,255,.88)';
+        ctx.strokeStyle = 'rgba(120,80,200,.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(xs[i], ys[i], 5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(60,40,110,.9)';
+        ctx.fillText(`${Math.round(points[i].v)}分`, xs[i], ys[i] - 10);
+        ctx.globalAlpha = 0.78;
+        ctx.fillText(points[i].year, xs[i], h - pad + 16);
+        ctx.globalAlpha = 1;
+      }
+    });
+  }
+
+  function drawSingleBarHours(canvasId, item) {
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      const pad = 28;
+      drawAxes(ctx, w, h, pad);
+
+      const max = 6.0; // visual cap
+      const innerW = w - pad*2;
+      const innerH = h - pad*2;
+      const barW = Math.min(220, innerW * 0.6);
+      const x = pad + (innerW - barW) / 2;
+      const bh = Math.round((item.hours / max) * innerH);
+      const y = (h - pad) - bh;
+
+      const grad = ctx.createLinearGradient(0, y, 0, y + bh);
+      grad.addColorStop(0, 'rgba(255,180,220,.55)');
+      grad.addColorStop(1, 'rgba(120,80,200,.12)');
+      ctx.fillStyle = grad;
+      roundRect(ctx, x, y, barW, bh, 14);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(220,140,200,.30)';
+      ctx.lineWidth = 1;
+      roundRect(ctx, x, y, barW, bh, 14);
+      ctx.stroke();
+
+      ctx.font = '13px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.fillStyle = 'rgba(60,40,110,.92)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${item.label}: 平均 ${item.hours} 時間/日`, w/2, y - 10);
+      ctx.globalAlpha = 0.78;
+      ctx.fillText('（7プラットフォーム合算・自己申告）', w/2, h - pad + 18);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
   }
 
   function ensureMiniRings() {
@@ -2637,125 +2976,6 @@ function renderAccessorySelects() {
     });
   }
 
-  function bindTutorial() {
-    // Keep this super robust: always open tutorial.html via runtime URL.
-    const openTutorial = async () => {
-      try {
-        const url = chrome.runtime.getURL('tutorial.html');
-        await chrome.tabs.create({ url });
-      } catch (err) {
-        console.warn('[options] tutorial open failed', err);
-      }
-    };
-
-    const openOnbModal = () => {
-      if (!dom.onbModal) return;
-      dom.onbModal.classList.add('is-open');
-      document.body.classList.add('hb-modalOpen');
-      dom.onbModal.setAttribute('aria-hidden', 'false');
-    };
-
-    const closeOnbModal = () => {
-      if (!dom.onbModal) return;
-      dom.onbModal.classList.remove('is-open');
-      document.body.classList.remove('hb-modalOpen');
-      dom.onbModal.setAttribute('aria-hidden', 'true');
-    };
-
-    const updateOnbUI = async () => {
-      let done = false;
-      try {
-        const r = await chrome.storage.local.get([
-          'follone_onboarding_done',
-          'follone_onboarding_state',
-          'follone_onboarding_phase',
-          'follone_onboarding_seen'
-        ]);
-        done = !!r.follone_onboarding_done || r.follone_onboarding_state === 'completed' || r.follone_onboarding_phase === 'done';
-
-        // Banner stays visible until done.
-        if (dom.onbBanner) dom.onbBanner.hidden = done;
-        if (dom.tutorialState) dom.tutorialState.textContent = done ? 'done' : 'not started';
-        if (dom.btnTutorial) dom.btnTutorial.textContent = done ? 'REOPEN' : 'START';
-
-        // First-time welcome modal: show once per profile until user dismisses.
-        const seen = !!r.follone_onboarding_seen;
-        if (!done && !seen) {
-          try { await chrome.storage.local.set({ follone_onboarding_seen: true }); } catch (_e) {}
-          openOnbModal();
-        }
-      } catch (_e) {
-        if (dom.tutorialState) dom.tutorialState.textContent = 'unknown';
-      }
-      return done;
-    };
-
-    // Banner buttons
-    if (dom.onbStartTutorial) dom.onbStartTutorial.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      await openTutorial();
-    });
-    if (dom.onbSkip) dom.onbSkip.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      if (dom.onbBanner) dom.onbBanner.hidden = true;
-      speak('OK。上のバナーからいつでも開始できるよ。', (app.data.characterId || 'PET').toUpperCase());
-    });
-
-    // Modal buttons
-    if (dom.btnOnbStart) dom.btnOnbStart.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      closeOnbModal();
-      await openTutorial();
-    });
-    if (dom.btnOnbLater) dom.btnOnbLater.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      closeOnbModal();
-      speak('OK。上のバナーからいつでも開始できるよ。', (app.data.characterId || 'PET').toUpperCase());
-    });
-    if (dom.btnCloseOnb) dom.btnCloseOnb.addEventListener('click', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      closeOnbModal();
-    });
-    // backdrop click
-    if (dom.onbModal) {
-      dom.onbModal.addEventListener('click', (e) => {
-        const t = e.target;
-        if (t && t.getAttribute && t.getAttribute('data-close') === '1') closeOnbModal();
-      });
-    }
-
-    // Settings card buttons (START/RESET)
-    if (dom.btnTutorial) dom.btnTutorial.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      await openTutorial();
-    });
-
-    if (dom.btnResetOnboarding) dom.btnResetOnboarding.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const ok = confirm('チュートリアル状態をリセットしますか？');
-      if (!ok) return;
-      try {
-        await chrome.storage.local.set({
-          follone_onboarding_done: false,
-          follone_onboarding_state: 'not_started',
-          follone_onboarding_phase: 'start'
-        });
-        await updateOnbUI();
-        speak('リセットしたよ。STARTで再開してね。', (app.data.characterId || 'PET').toUpperCase());
-      } catch (_e) {
-        alert('リセットに失敗した…');
-      }
-    });
-
-    // initial render + keep in sync
-    updateOnbUI();
-    try {
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'local') return;
-        if (changes.follone_onboarding_done || changes.follone_onboarding_state || changes.follone_onboarding_phase) updateOnbUI();
-      });
-    } catch (_e) {}
-  }
 
 function bindAccessory() {
   if (dom.selHead) {
@@ -2965,7 +3185,6 @@ if (dom.selHead || dom.selFx) {
 
     bindNav();
     bindGlanceAndHelp();
-    bindTutorial();
     normalizeTooltips();
     bindAccessory();
     bindInventoryButtons();

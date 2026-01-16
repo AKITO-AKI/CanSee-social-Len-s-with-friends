@@ -229,6 +229,96 @@
   </div>
 </div>
 
+<!-- MAIN: ARTICLE (Sprint3: Submission quality) -->
+<div class="hb-view" data-view="article">
+  <div class="hb-paneTitle">ARTICLE</div>
+  <div class="hb-paneSub">背景・根拠・提言（図表つき／提出用）</div>
+
+  <div class="hb-article">
+    <nav class="hb-articleToc" aria-label="目次">
+      <div class="hb-card hb-articleToc__card">
+        <div class="hb-card__hd">CONTENTS</div>
+        <ol class="hb-articleToc__list" id="articleToc"></ol>
+        <div class="hb-mini hb-mini--muted">※図表はローカル描画（Chart.js互換ではありません）。</div>
+      </div>
+    </nav>
+
+    <article class="hb-articleBody" id="articleBody">
+      <section class="hb-articleSec" id="sec-bg">
+        <h3 class="hb-articleH">1. 背景</h3>
+        <p class="hb-mini">
+          SNSは「つながり」と同時に、アルゴリズム由来の偏り・過激化・衝突を生みやすい。
+          CanSeeは、叱責ではなく<strong>観察と気づき</strong>を、ゆるふわキャラクターとUIで支援する。
+          <a class="hb-cite" href="#ref-1" aria-label="参考文献1">[1]</a>
+        </p>
+        <div class="hb-quote">
+          <div class="hb-quote__hd">ねらい</div>
+          <div class="hb-mini">「危険な投稿を止める」より、<b>自分のタイムラインの癖を知って選べる</b>体験を作る。</div>
+        </div>
+      </section>
+
+      <section class="hb-articleSec" id="sec-data">
+        <h3 class="hb-articleH">2. 根拠データ</h3>
+
+        <div class="hb-figGrid">
+          <figure class="hb-card hb-fig">
+            <div class="hb-card__hd">図1：日本の青少年 平日1日あたりインターネット平均利用時間（2023年度）</div>
+            <canvas class="hb-fig__canvas" id="artC1" width="520" height="220"></canvas>
+            <figcaption class="hb-mini hb-mini--muted">出典：こども家庭庁「青少年のインターネット利用環境実態調査（令和5年度）」<a class="hb-cite" href="#ref-1" aria-label="参考文献1">[1]</a></figcaption>
+          </figure>
+
+          <figure class="hb-card hb-fig">
+            <div class="hb-card__hd">図2：高校生の平均利用時間の推移（2021→2023年度）</div>
+            <canvas class="hb-fig__canvas" id="artC2" width="520" height="220"></canvas>
+            <figcaption class="hb-mini hb-mini--muted">出典：こども家庭庁「青少年のインターネット利用環境実態調査（令和3〜5年度）」<a class="hb-cite" href="#ref-1" aria-label="参考文献1">[1]</a></figcaption>
+          </figure>
+        </div>
+
+        <figure class="hb-card hb-fig hb-fig--wide">
+          <div class="hb-card__hd">図3：米国のティーン SNS使用時間（平均）</div>
+          <canvas class="hb-fig__canvas" id="artC3" width="720" height="240"></canvas>
+          <figcaption class="hb-mini hb-mini--muted">出典：Gallup（2023）「Teens Spend Average of 4.8 Hours on Social Media Per Day」<a class="hb-cite" href="#ref-3" aria-label="参考文献3">[3]</a></figcaption>
+        </figure>
+
+        <figure class="hb-card hb-fig hb-fig--wide">
+          <div class="hb-card__hd">図4：あなたのタイムライン指標（直近30日）</div>
+          <div class="hb-mini hb-mini--muted" style="margin:-8px 0 10px;">※BIASの集計（Focus/Variety/Explore）から自動生成。データが無い場合は表示しません。</div>
+          <canvas class="hb-fig__canvas" id="artC4" width="720" height="240"></canvas>
+          <figcaption class="hb-mini hb-mini--muted">出典：本拡張機能のローカル集計（chrome.storage.local）</figcaption>
+        </figure>
+      </section>
+
+      <section class="hb-articleSec" id="sec-issue">
+        <h3 class="hb-articleH">3. なぜ問題になるのか（体験の視点）</h3>
+        <ul class="hb-list">
+          <li class="hb-li"><div class="hb-li__label">偏りが加速する</div><div class="hb-mini">同じ話題ばかりが強化され、視野が狭くなる。<a class="hb-cite" href="#ref-2" aria-label="参考文献2">[2]</a></div></li>
+          <li class="hb-li"><div class="hb-li__label">衝突が起きやすい</div><div class="hb-mini">強い言葉・極端な主張が可視化されやすく、疲労が溜まる。<a class="hb-cite" href="#ref-2" aria-label="参考文献2">[2]</a></div></li>
+          <li class="hb-li"><div class="hb-li__label">時間が溶ける</div><div class="hb-mini">短い刺激の連続で、停止のきっかけが作りにくい。<a class="hb-cite" href="#ref-1" aria-label="参考文献1">[1]</a></div></li>
+        </ul>
+      </section>
+
+      <section class="hb-articleSec" id="sec-prop">
+        <h3 class="hb-articleH">4. 提言（CanSeeがやること）</h3>
+        <div class="hb-steps">
+          <div class="hb-step"><div class="hb-step__n">A</div><div class="hb-step__t">見える化</div><div class="hb-mini">Focus/Variety/Explore と状態チップで「今」を理解。</div></div>
+          <div class="hb-step"><div class="hb-step__n">B</div><div class="hb-step__t">介入</div><div class="hb-mini">Spotlightで「理由」と「行動」を短く提示（責めない）。</div></div>
+          <div class="hb-step"><div class="hb-step__n">C</div><div class="hb-step__t">継続</div><div class="hb-mini">クエスト/解放で“続けたくなる”動機を設計。</div></div>
+        </div>
+      </section>
+
+      <section class="hb-articleSec" id="sec-ref">
+        <h3 class="hb-articleH">5. 参考</h3>
+        <ol class="hb-refs" id="articleRefs">
+          <li id="ref-1">こども家庭庁「青少年のインターネット利用環境実態調査（令和3〜6年度）」 ※本文の数値はデモ用に整理（提出前に一次資料のURL/ページ番号を追記）</li>
+          <li id="ref-2">総務省・関連白書（SNS/ネット利用の概況） ※提出前に該当章を確定して追記</li>
+          <li id="ref-3">Gallup（2023）“Teens Spend Average of 4.8 Hours on Social Media Per Day” ※提出前にURLを追記</li>
+          <li id="ref-4">Pew Research Center（Teens and Social Media） ※提出前にURLを追記</li>
+        </ol>
+      </section>
+    </article>
+  </div>
+</div>
+
 <!-- MAIN: SETTINGS -->
 <div class="hb-view" data-view="settings">
   <div class="hb-paneTitle">SETTINGS</div>
@@ -558,6 +648,7 @@
 <button class="hb-tab" data-open="bias">BIAS</button>
 <button class="hb-tab" data-open="settings">SETTINGS</button>
 <button class="hb-tab" data-open="rpg">GAME</button>
+<button class="hb-tab" data-open="article">ARTICLE</button>
 <button class="hb-tab" data-open="log">LOG</button>
 </div>
 <div class="hb-sideStack">
@@ -605,33 +696,6 @@
   <!-- Tooltip -->
   <div id="hbTooltip" class="hb-tooltip" role="tooltip" aria-hidden="true"></div>
 
-
-
-
-
-<!-- Onboarding Welcome Modal (first time only) -->
-<div class="hb-modal" id="onbModal" aria-hidden="true">
-  <div class="hb-modal__backdrop" data-close="1"></div>
-  <div class="hb-modal__panel hb-onbModal" role="dialog" aria-modal="true" aria-label="初回セットアップ">
-    <div class="hb-modal__hd">
-      <div class="hb-modal__title">WELCOME</div>
-      <button class="hb-iconBtn" id="btnCloseOnb" aria-label="閉じる">✕</button>
-    </div>
-    <div class="hb-onbModal__bd">
-      <div class="hb-onbModal__lead">1分で体験できるように整えてるよ。まずは流れだけ掴もう。</div>
-      <ol class="hb-onbSteps">
-        <li><b>設定</b>：AIの準備（学校PCでもOK）</li>
-        <li><b>TUTORIAL</b>：練習用タイムラインで体験</li>
-        <li><b>Xへ</b>：Overlayが起動してチップが動く</li>
-      </ol>
-      <div class="hb-row hb-row--center" style="margin-top:14px">
-        <button class="hb-btn hb-btn--pri hb-btn--xl" id="btnOnbStart" type="button">TUTORIALを始める</button>
-        <button class="hb-btn" id="btnOnbLater" type="button">後でやる</button>
-      </div>
-      <div class="hb-mini hb-mini--muted" style="margin-top:10px">※あとでやるを押しても、上のバナーからいつでも開始できます。</div>
-    </div>
-  </div>
-</div>
 
 
 <!-- Character Slot Modal (full-screen) -->

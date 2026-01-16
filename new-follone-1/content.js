@@ -161,6 +161,13 @@
 
   function cleanupInjectedOrphans(reason) {
     try {
+      const why = String(reason || "");
+
+      // If spotlight is open during SPA navigation, close it first to avoid locks/badges lingering.
+      if ((why === "navigate" || why === "hard") && state?.spotlightOpen) {
+        try { closeSpotlight("cleanup"); } catch (_) {}
+      }
+
       // Remove any injected post elements that are no longer inside a tweet article.
       const nodes = document.querySelectorAll('[data-cansee="post"]');
       nodes.forEach((n) => {
@@ -172,6 +179,48 @@
         } catch (_) {}
       });
 
+      // Deduplicate UI roots (defensive against re-mount bugs on SPA transitions)
+      try {
+        const ids = ["follone-widget", "follone-overlay", "follone-spotlight", "follone-loader"]; // known roots
+        ids.forEach((id) => {
+          const all = document.querySelectorAll(`#${id}`);
+          if (all && all.length > 1) {
+            for (let i = 1; i < all.length; i++) {
+              try { all[i].remove(); } catch (_) {}
+            }
+          }
+        });
+      } catch (_) {}
+
+      // Aggressive cleanup (only for navigation/hard reset): clear lingering overlays/toasts.
+      // Keep the main widget if possible to avoid visible flicker.
+      if (why === "navigate" || why === "hard") {
+        try {
+          const ui = document.querySelectorAll('[data-cansee="ui"]');
+          ui.forEach((n) => {
+            try {
+              const role = String(n?.dataset?.canseeRole || "");
+              if (role === "widget") return;
+              if (role === "ctx-banner") return;
+              // Remove anything else that might become a ghost layer.
+              n.remove();
+            } catch (_) {}
+          });
+        } catch (_) {}
+
+        // Also remove highlight/spotlight classes if they somehow remained.
+        try {
+          const arts = document.querySelectorAll('article.follone-danger, article.follone-spotlight-target');
+          arts.forEach((a) => {
+            try {
+              a.classList.remove("follone-danger", "follone-spotlight-target");
+              const b = a.querySelector?.('.follone-target-badge');
+              if (b) b.remove();
+            } catch (_) {}
+          });
+        } catch (_) {}
+      }
+
       // Also prune cached post refs that are no longer connected.
       if (state && state.elemById) {
         for (const [id, el] of state.elemById.entries()) {
@@ -179,7 +228,7 @@
         }
       }
 
-      pushEvent('cleanup', { reason: String(reason || '') });
+      pushEvent('cleanup', { reason: why });
     } catch (_) {}
   }
 
