@@ -1741,3 +1741,13 @@ body.hb-modalOpen{overflow:hidden;}
   .hb-steps{ grid-template-columns:1fr; }
   .hb-figGrid{ grid-template-columns:1fr; }
 }
+
+
+/* Sprint3 (Article): refs jump / back */
+.hb-refs li { position: relative; padding-left: 14px; }
+.hb-refs li.is-flash { outline: 2px solid rgba(180,140,255,.45); box-shadow: 0 0 0 6px rgba(180,140,255,.12); border-radius: 12px; }
+.hb-refBackRow { display:flex; align-items:center; gap:10px; margin: 10px 0 12px; }
+.hb-refBack { position: sticky; top: 12px; }
+
+/* Figures (wide) spacing helper */
+.hb-fig__canvas { display:block; width:100%; max-width:100%; border-radius: 14px; }

@@ -1061,6 +1061,8 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     }
   };
 
+  const ARTICLE_STATE = { lastCiteId: null, citeSeq: 0 };
+
   function renderArticle() {
     // build TOC (once)
     const toc = document.getElementById('articleToc');
@@ -1098,6 +1100,10 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     // Figure 4: real user data (last 30 days) from BiasAgg
     drawUserBiasSummary('artC4');
 
+    // Figure 5-6: submission-grade diagrams
+    drawFlowDiagram('artC5');
+    drawDeltaCard('artC6');
+
     // citations: smooth jump + highlight
     bindArticleCitations();
   }
@@ -1108,6 +1114,19 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     if (root.dataset.citeBound === '1') return;
     root.dataset.citeBound = '1';
 
+    const backBtn = document.getElementById('refBackBtn');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        const id = ARTICLE_STATE.lastCiteId;
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        backBtn.classList.add('is-hide');
+        window.setTimeout(() => backBtn.classList.add('is-off'), 220);
+      });
+    }
+
     root.addEventListener('click', (ev) => {
       const a = ev.target?.closest?.('a.hb-cite');
       if (!a) return;
@@ -1117,13 +1136,26 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
       const target = document.getElementById(id);
       if (!target) return;
       ev.preventDefault();
+
+      // assign cite id (for back)
+      if (!a.id) {
+        ARTICLE_STATE.citeSeq += 1;
+        a.id = `cite-${ARTICLE_STATE.citeSeq}`;
+      }
+      ARTICLE_STATE.lastCiteId = a.id;
+
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
       // highlight
       target.classList.remove('is-flash');
-      // force reflow
       void target.offsetWidth;
       target.classList.add('is-flash');
       window.setTimeout(() => target.classList.remove('is-flash'), 1200);
+
+      if (backBtn) {
+        backBtn.classList.remove('is-off');
+        backBtn.classList.remove('is-hide');
+      }
     }, { passive: false });
   }
 
@@ -1212,6 +1244,163 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
       });
     });
   }
+
+  function drawFlowDiagram(canvasId) {
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      const pad = 18;
+      const topY = 34;
+      const boxH = 56;
+      const gap = 14;
+      const cols = 3;
+      const boxW = Math.floor((w - pad*2 - gap*(cols-1)) / cols);
+
+      const boxes = [
+        { x: pad, y: topY, t: '投稿DOM\n抽出', s: 'content.js' },
+        { x: pad + (boxW+gap), y: topY, t: '分類\n(LLM)', s: 'offscreen.js' },
+        { x: pad + (boxW+gap)*2, y: topY, t: '結果\n保存', s: 'sw.js' },
+        { x: pad, y: topY + boxH + 60, t: '状態チップ\n/ハイライト', s: 'content.js' },
+        { x: pad + (boxW+gap), y: topY + boxH + 60, t: '集計\n(biasAgg)', s: 'sw.js' },
+        { x: pad + (boxW+gap)*2, y: topY + boxH + 60, t: '可視化\n(BIAS/ARTICLE)', s: 'options.js' },
+      ];
+
+      // soft grid
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = 'rgba(190,160,255,.14)';
+      ctx.lineWidth = 1;
+      for (let x=pad; x<w-pad; x+=24) { ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, h-pad); ctx.stroke(); }
+      for (let y=pad; y<h-pad; y+=24) { ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w-pad, y); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+
+      function drawBox(b) {
+        const r = 14;
+        const grad = ctx.createLinearGradient(b.x, b.y, b.x, b.y+boxH);
+        grad.addColorStop(0, 'rgba(255,255,255,.78)');
+        grad.addColorStop(1, 'rgba(235,225,255,.56)');
+        ctx.fillStyle = grad;
+        roundRect(ctx, b.x, b.y, boxW, boxH, r); ctx.fill();
+        ctx.strokeStyle = 'rgba(160,120,255,.28)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, b.x, b.y, boxW, boxH, r); ctx.stroke();
+
+        ctx.fillStyle = 'rgba(60,40,110,.92)';
+        ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const lines = String(b.t).split('\n');
+        ctx.fillText(lines[0] || '', b.x + boxW/2, b.y + boxH/2 - 7);
+        if (lines[1]) ctx.fillText(lines[1], b.x + boxW/2, b.y + boxH/2 + 9);
+
+        ctx.globalAlpha = 0.72;
+        ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.fillText(String(b.s), b.x + boxW/2, b.y + boxH - 12);
+        ctx.globalAlpha = 1;
+      }
+
+      function arrow(x1,y1,x2,y2) {
+        ctx.strokeStyle = 'rgba(140,100,220,.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        const ang = Math.atan2(y2-y1, x2-x1);
+        const ah = 8;
+        ctx.fillStyle = 'rgba(140,100,220,.55)';
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - ah*Math.cos(ang - 0.5), y2 - ah*Math.sin(ang - 0.5));
+        ctx.lineTo(x2 - ah*Math.cos(ang + 0.5), y2 - ah*Math.sin(ang + 0.5));
+        ctx.closePath(); ctx.fill();
+      }
+
+      boxes.forEach(drawBox);
+
+      // top row
+      arrow(boxes[0].x+boxW, boxes[0].y+boxH/2, boxes[1].x, boxes[1].y+boxH/2);
+      arrow(boxes[1].x+boxW, boxes[1].y+boxH/2, boxes[2].x, boxes[2].y+boxH/2);
+      // down
+      arrow(boxes[0].x+boxW/2, boxes[0].y+boxH, boxes[3].x+boxW/2, boxes[3].y);
+      arrow(boxes[1].x+boxW/2, boxes[1].y+boxH, boxes[4].x+boxW/2, boxes[4].y);
+      arrow(boxes[2].x+boxW/2, boxes[2].y+boxH, boxes[5].x+boxW/2, boxes[5].y);
+      // bottom row
+      arrow(boxes[3].x+boxW, boxes[3].y+boxH/2, boxes[4].x, boxes[4].y+boxH/2);
+      arrow(boxes[4].x+boxW, boxes[4].y+boxH/2, boxes[5].x, boxes[5].y+boxH/2);
+
+      ctx.fillStyle = 'rgba(60,40,110,.92)';
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.globalAlpha = 0.75;
+      ctx.fillText('入力→処理→出力 を1枚で説明', pad, 8);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawDeltaCard(canvasId) {
+    const arr = ARTICLE_DATA.hsTrend_minutes || [];
+    if (arr.length < 2) {
+      with2d(canvasId, (ctx, w, h) => {
+        ctx.clearRect(0,0,w,h);
+        ctx.globalAlpha = 0.85;
+        ctx.font = '14px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('データが不足しています', w/2, h/2);
+        ctx.globalAlpha = 1;
+      });
+      return;
+    }
+
+    const first = arr[0];
+    const last = arr[arr.length - 1];
+    const delta = (last.v - first.v);
+    const pct = first.v ? (delta / first.v) * 100 : 0;
+
+    with2d(canvasId, (ctx, w, h) => {
+      ctx.clearRect(0,0,w,h);
+      const pad = 18;
+      const cards = [
+        { t: '2021', v: `${first.v.toFixed(1)}分` },
+        { t: '2023', v: `${last.v.toFixed(1)}分` },
+        { t: '増加', v: `${delta>=0?'+':''}${delta.toFixed(1)}分` },
+        { t: '増加率', v: `${pct>=0?'+':''}${pct.toFixed(1)}%` },
+      ];
+      const gap = 12;
+      const cardW = Math.floor((w - pad*2 - gap*(cards.length-1)) / cards.length);
+      const cardH = 150;
+      const y = Math.floor((h - cardH) / 2);
+
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = 'rgba(60,40,110,.92)';
+      ctx.fillText('高校生：平日1日あたり平均利用時間（推移の差分）', pad, 8);
+      ctx.globalAlpha = 1;
+
+      for (let i=0;i<cards.length;i++) {
+        const x = pad + i*(cardW+gap);
+        const r = 16;
+        const grad = ctx.createLinearGradient(x, y, x, y+cardH);
+        grad.addColorStop(0,'rgba(255,255,255,.82)');
+        grad.addColorStop(1,'rgba(235,225,255,.56)');
+        ctx.fillStyle = grad;
+        roundRect(ctx, x, y, cardW, cardH, r); ctx.fill();
+        ctx.strokeStyle = 'rgba(160,120,255,.26)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, x, y, cardW, cardH, r); ctx.stroke();
+
+        ctx.fillStyle = 'rgba(60,40,110,.92)';
+        ctx.font = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(cards[i].t, x+12, y+12);
+
+        ctx.font = '20px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(cards[i].v, x+12, y + cardH/2);
+      }
+    });
+  }
+
 
   function with2d(id, fn) {
     const c = document.getElementById(id);
