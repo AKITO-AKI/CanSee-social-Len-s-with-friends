@@ -183,14 +183,10 @@
       if (document.getElementById(styleId)) return;
 
       const probe = document.getElementById('follone-loader');
-      if (probe) {
-        const st = getComputedStyle(probe);
-        // If CSS is working, loader should be fixed + very high z-index.
-        if (st.position === 'fixed' && Number(st.zIndex || 0) > 1000000) return;
-      } else {
-        // If loader isn't in DOM yet, don't inject blindly; we'll re-check later.
-        return;
-      }
+      if (!probe || !probe.classList.contains('show')) return;
+      const st = getComputedStyle(probe);
+      // If CSS is working, loader should be fixed + very high z-index.
+      if (st.position === 'fixed' && Number(st.zIndex || 0) > 1000000) return;
 
       const css = `
 #follone-loader{position:fixed;inset:0;z-index:2147483638;display:none;align-items:center;justify-content:center;background:rgba(12,12,16,0.28);backdrop-filter:blur(6px);} 
@@ -209,10 +205,10 @@
 .cansee-post-chip[data-kind="done"]{background:rgba(220,255,236,0.92);} 
 .cansee-post-chip[data-kind="failed"]{background:rgba(255,222,232,0.92);} 
 `;
-      const st = document.createElement('style');
-      st.id = styleId;
-      st.textContent = css;
-      document.documentElement.appendChild(st);
+      const stEl = document.createElement('style');
+      stEl.id = styleId;
+      stEl.textContent = css;
+      document.documentElement.appendChild(stEl);
     } catch (_) {}
   }
 

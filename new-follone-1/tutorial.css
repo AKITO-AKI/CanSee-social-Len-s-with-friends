@@ -196,7 +196,7 @@ body{
   border-radius:18px;
   border:1px solid var(--line);
   background:var(--panel2);
-  display:none; align-items:center; justify-content:center;
+  display:flex; align-items:center; justify-content:center;
   box-shadow:var(--shadow);
 }
 #guidePet{width:84px; height:84px; image-rendering:pixelated;}
@@ -241,6 +241,11 @@ button{
 button:hover{box-shadow:0 10px 22px rgba(155,135,255,0.16); transform: translateY(-1px)}
 button:active{transform: translateY(1px)}
 button[disabled]{opacity:0.45; cursor:not-allowed}
+#guideActions button{
+  white-space: nowrap;
+  min-width: 96px;
+}
+
 
 .tTipTitle{font-weight:900; margin-bottom:6px;}
 .tTipText{font-size:12px; line-height:1.55; opacity:0.8;}
@@ -249,7 +254,7 @@ button[disabled]{opacity:0.45; cursor:not-allowed}
 .tSpotVeil{
   position:fixed; inset:0; z-index:2147483646;
   background:rgba(10,10,12,0.72);
-  display:none; align-items:center; justify-content:center;
+  display:flex; align-items:center; justify-content:center;
   padding:16px;
   opacity:1;
   transition: opacity 220ms ease;
@@ -481,3 +486,9 @@ body {
 .tChipDemo[data-state="done"]{border-color:rgba(150,225,185,.95);}
 .tChipDemo[data-state="failed"]{border-color:rgba(255,180,200,.95);}
 .tChipDemo.isPop{animation:tPop 360ms cubic-bezier(.2,.8,.2,1);}
+
+/* Fix: guide bubble buttons should not collapse into vertical text */
+.tActions button{white-space:nowrap; min-width:96px;}
+@media (max-width: 980px){
+  .tActions button{min-width:88px;}
+}

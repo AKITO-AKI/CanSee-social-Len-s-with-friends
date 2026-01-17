@@ -949,6 +949,7 @@
     radial-gradient(600px 380px at 20% 15%, var(--ui-accent-glow), transparent 70%),
     repeating-linear-gradient(180deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0) 3px, rgba(0,0,0,0) 7px);
   opacity: 0.95;
+}
 
 #follone-loader .box{
   position: relative;
