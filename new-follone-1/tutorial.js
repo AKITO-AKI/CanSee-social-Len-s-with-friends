@@ -1,42 +1,28 @@
 /*
-  M5 Tutorial World (separate page)
-  Goals (per latest UX spec):
-  - No focus-cue overlays here (Options handles the only required focus cues).
-  - Clear step order:
-      1) show the whole world
-      2) what you can do / how to use
-      3) highlight (Spotlight) explanation + experience (both buttons just dismiss)
-      4) leveling / XP explanation
-      5) choose: end now or continue freeplay
-  - Character is the narrator: speech-bubble + standing avatar (PetEngine canvas).
+  CanSee Tutorial (richer)
+  - 5-step flow, with "missions" per step for a more satisfying experience
+  - Interactive demos: chip flow (queued→processing→done), Spotlight demo, XP gain
+  - Stores onboarding progress best-effort
 */
 
 const $ = (id) => document.getElementById(id);
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
 function setText(el, text){ if (el) el.textContent = String(text ?? ""); }
 
 function normalizeCharId(id){
   if (id === "likoris") return "likoris";
-  // legacy
-  if (id === "forone") return "follone";
+  if (id === "forone") return "follone"; // legacy
   return "follone";
 }
-
-function charName(charId){
-  return charId === "likoris" ? "りこりす" : "ふぉろね";
-}
+function charName(charId){ return charId === "likoris" ? "りこりす" : "ふぉろね"; }
 
 async function sendSW(msg){
   try { return await chrome.runtime.sendMessage(msg); }
   catch (e) { return { ok:false, error:String(e) }; }
 }
 
-
-
 async function startAiPrepare({ poll=true } = {}) {
-  // Best-effort: start AI setup to trigger model download / session creation.
   const chip = $("hudAI");
   const set = (v) => { if (chip) chip.textContent = String(v); };
   set("PREP");
@@ -48,7 +34,6 @@ async function startAiPrepare({ poll=true } = {}) {
   }
   if (!poll) return { ok:false, status:"starting" };
 
-  // Poll status for up to ~90s (non-blocking for tutorial; we don't hard-fail).
   const t0 = Date.now();
   while (Date.now() - t0 < 90000) {
     await sleep(1200);
@@ -56,7 +41,6 @@ async function startAiPrepare({ poll=true } = {}) {
     if (st && st.ok) {
       if (st.status === "ready") { set("READY"); return { ok:true, status:"ready" }; }
       if (st.status === "unavailable") { set("OFF"); return { ok:false, status:"unavailable" }; }
-      // progress
       const p = Number(st.progress || 0);
       if (Number.isFinite(p) && p > 0) set(`...${Math.round(p)}%`);
       else set("...");
@@ -71,7 +55,6 @@ async function startAiPrepare({ poll=true } = {}) {
 async function getProgress(){
   const r = await sendSW({ type: "FOLLONE_GET_PROGRESS" });
   if (r && r.ok) return r;
-  // fallback (tutorial should still run)
   return { ok:false, xp:0, level:1, equippedHead:"" };
 }
 
@@ -81,8 +64,22 @@ async function addXp(amount){
 }
 
 async function markOnboardingDone(){
-  try { await chrome.storage.local.set({ follone_onboarding_done: true, follone_onboarding_phase: "done", follone_onboarding_state: "completed" }); }
-  catch(_e) {}
+  try {
+    await chrome.storage.local.set({
+      follone_onboarding_done: true,
+      follone_onboarding_phase: "done",
+      follone_onboarding_state: "completed"
+    });
+  } catch(_e) {}
+}
+
+async function setOnboardingPhase(step){
+  try {
+    await chrome.storage.local.set({
+      follone_onboarding_phase: `tutorial_step_${step}`,
+      follone_onboarding_state: "in_tutorial"
+    });
+  } catch(_e) {}
 }
 
 async function loadGuideAvatar(charId){
@@ -125,7 +122,7 @@ async function loadGuideAvatar(charId){
   }
 }
 
-async function say(lines, { clear=true, lineDelay=230 } = {}){
+async function say(lines, { clear=true, lineDelay=220 } = {}){
   const box = $("guideText");
   if (!box) return;
   if (clear) box.innerHTML = "";
@@ -151,16 +148,128 @@ function mkBtn(label, { kind="normal" } = {}){
   b.type = "button";
   b.textContent = label;
   if (kind === "ghost") b.classList.add("tGhost");
+  if (kind === "primary") b.classList.add("tPrimary");
   return b;
 }
 
+function pulseCelebrate(){
+  const card = $("guideCard");
+  if (!card) return;
+  card.classList.remove("isCelebrate");
+  void card.offsetWidth;
+  card.classList.add("isCelebrate");
+  setTimeout(() => card.classList.remove("isCelebrate"), 650);
+}
+
+// Missions ------------------------------------------------------------
+const MISSIONS = {
+  1: [
+    { title: "全体を見渡す", desc: "Overlayの例（左上のパネル）を見てみよう" },
+  ],
+  2: [
+    { title: "チップの流れを見る", desc: "queued→processing→done を再生してみよう" },
+  ],
+  3: [
+    { title: "Spotlightを体験", desc: "選択肢を増やして落ち着く練習" },
+  ],
+  4: [
+    { title: "XPが増えるのを見る", desc: "良い選択がXPになるのを確認" },
+  ],
+  5: [
+    { title: "次の行動を選ぶ", desc: "HOME BASEに戻る / Xを開く" },
+  ],
+};
+
+const doneMissions = new Set();
+function mKey(step, idx){ return `${step}:${idx}`; }
+
+function renderMissions(step){
+  const list = $("missionList");
+  const foot = $("missionFoot");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const ms = MISSIONS[step] || [];
+  ms.forEach((m, idx) => {
+    const li = document.createElement("li");
+    li.dataset.mission = mKey(step, idx);
+    li.className = doneMissions.has(mKey(step, idx)) ? "isDone" : "";
+
+    const icon = document.createElement("div");
+    icon.className = "mIcon";
+
+    const text = document.createElement("div");
+    text.className = "mText";
+
+    const title = document.createElement("div");
+    title.className = "mTitle";
+    title.textContent = m.title;
+
+    const desc = document.createElement("div");
+    desc.className = "mDesc";
+    desc.textContent = m.desc;
+
+    text.appendChild(title);
+    text.appendChild(desc);
+    li.appendChild(icon);
+    li.appendChild(text);
+    list.appendChild(li);
+  });
+
+  if (foot) {
+    const all = ms.length;
+    const done = ms.filter((_m, idx) => doneMissions.has(mKey(step, idx))).length;
+    foot.textContent = all ? `完了: ${done}/${all}` : "";
+  }
+}
+
+function completeMission(step, idx){
+  const key = mKey(step, idx);
+  if (doneMissions.has(key)) return;
+  doneMissions.add(key);
+  renderMissions(step);
+  pulseCelebrate();
+}
+
+// Demo: chip flow -----------------------------------------------------
+async function playChipFlow(postEl){
+  if (!postEl) return;
+  // avoid duplicates
+  postEl.querySelectorAll('.tChipDemo').forEach(n => n.remove());
+
+  const chip = document.createElement("div");
+  chip.className = "tChipDemo isPop";
+  chip.innerHTML = `<span>解析</span><b id="chipState">queued</b>`;
+  chip.dataset.state = "queued";
+  postEl.appendChild(chip);
+  await sleep(420);
+
+  const set = (st) => {
+    chip.dataset.state = st;
+    const b = chip.querySelector('#chipState');
+    if (b) b.textContent = st;
+  };
+
+  set("queued");
+  await sleep(560);
+  set("processing");
+  await sleep(860);
+  set("done");
+  await sleep(650);
+
+  chip.style.opacity = "0";
+  chip.style.transform = "translateY(-2px) scale(.99)";
+  await sleep(220);
+  chip.remove();
+}
+
+// Spotlight -----------------------------------------------------------
 async function showSpotlightOnce({ allowXp=true } = {}){
   const veil = $("spotVeil");
   const btnBack = $("spotBack");
   const btnSearch = $("spotSearch");
   if (!veil || !btnBack || !btnSearch) return { choice:"none", gained:0 };
 
-  // show
   veil.classList.add("on");
   await sleep(60);
   btnBack.classList.add("tPulse");
@@ -174,7 +283,6 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   btnBack.classList.remove("tPulse");
   btnSearch.classList.remove("tPulse");
 
-  // hide
   veil.classList.add("out");
   await sleep(220);
   veil.classList.remove("on");
@@ -194,7 +302,6 @@ async function showSpotlightOnce({ allowXp=true } = {}){
         setTimeout(() => chip.classList.remove("xp-pop"), 450);
       }
     } else {
-      // fallback display only
       const p = await getProgress();
       setText($("hudLv"), p.level || 1);
       setText($("hudXp"), p.xp || 0);
@@ -205,42 +312,7 @@ async function showSpotlightOnce({ allowXp=true } = {}){
   return { choice, gained };
 }
 
-async function enterFreeplay(){
-  const postHot = $("postHot");
-  const post0 = document.querySelector('[data-post="0"]');
-  const post2 = document.querySelector('[data-post="2"]');
-
-  const clickHint = async () => {
-    await say([
-      "OK。ここからは自由に試せるよ。",
-      "投稿をクリックするとSpotlightを出せる（練習用）。",
-      "どちらのボタンでもSpotlightは閉じるよ。",
-    ]);
-    setActions([mkBtn("Xへ戻る")]);
-    $("guideActions")?.firstChild?.addEventListener("click", async () => {
-      await markOnboardingDone();
-      try { window.close(); } catch(_e) {}
-    }, { once:true });
-  };
-
-  await clickHint();
-
-  const handler = async () => {
-    await showSpotlightOnce({ allowXp:true });
-    // after each, keep the hint minimal (don’t overwrite too aggressively)
-  };
-
-  // make posts clickable
-  [post0, postHot, post2].forEach((p) => {
-    if (!p) return;
-    p.classList.add("isTarget");
-    p.style.cursor = "pointer";
-    p.addEventListener("click", handler);
-  });
-}
-
 async function main(){
-  // Phase12: 5-step tutorial (fast + satisfying)
   const STEPS = [
     { id:1, title:'WELCOME', hint:'準備と全体像' },
     { id:2, title:'Overlay', hint:'見方とチップ' },
@@ -249,7 +321,7 @@ async function main(){
     { id:5, title:'FINISH', hint:'始めよう' },
   ];
 
-  // Decide narrator character (best-effort: selected character)
+  // narrator character
   let charId = 'follone';
   try {
     const cur = await chrome.storage.local.get(["cansee_selected_character_id","follone_characterId","characterId","selectedCharacterId"]);
@@ -260,13 +332,13 @@ async function main(){
   setText($('guideChar'), charName(charId));
   loadGuideAvatar(charId);
 
-  // Initial HUD
+  // HUD
   const p0 = await getProgress();
   setText($('hudLv'), p0.level || 1);
   setText($('hudXp'), p0.xp || 0);
   setText($('hudGain'), 0);
 
-  // Start AI setup in background (do not block steps)
+  // start AI prep (non-blocking)
   startAiPrepare({ poll:true }).catch(() => {});
 
   const visited = new Set();
@@ -285,7 +357,6 @@ async function main(){
     if (fill) fill.style.width = `${pct}%`;
     if (bar) bar.setAttribute('aria-valuenow', String(idx+1));
 
-    // Nav buttons
     STEPS.forEach(s => {
       const n = $('nav' + s.id);
       if (!n) return;
@@ -306,92 +377,138 @@ async function main(){
     current = step;
     visited.add(step);
     setProgress(step);
+    renderMissions(step);
     flash();
+    setOnboardingPhase(step).catch(() => {});
 
-    // Clear targets
     $('postHot')?.classList.remove('isTarget');
 
-    // STEP 1: Welcome
+    // STEP 1
     if (step === 1) {
       document.getElementById('overlayDemo')?.scrollIntoView({ behavior:'smooth', block:'start' });
+      completeMission(1, 0);
       await say([
         `やあ。${charName(charId)}だよ。`,
-        'ここは練習用のTUTORIAL。',
-        'まずはAIの準備を始めて、全体像をつかもう。',
-        '右の数字(1〜5)で、いつでも戻れるよ。',
+        'ここは練習用のTUTORIAL。実際のXには影響しないよ。',
+        '右の数字(1〜5)で、いつでも戻れる。',
+        'では、Overlayの見方からいこう。',
       ]);
-      const b = mkBtn('次へ');
+      const b = mkBtn('次へ', { kind:'primary' });
       setActions([b]);
       await new Promise(r => b.addEventListener('click', r, { once:true }));
       return goto(2);
     }
 
-    // STEP 2: Overlay basics
+    // STEP 2
     if (step === 2) {
       document.getElementById('overlayDemo')?.classList.add('isPop');
       await sleep(120);
       await say([
-        'Overlayは「今のタイムラインの偏り」を見るための窓。',
-        'Focus: 同じ話題に偏りすぎてない？',
+        'Overlayは「今のタイムラインの偏り」を見る窓。',
+        'Focus: 同じ話題に偏ってない？',
         'Variety: 話題の幅はある？',
         'Explore: 新しい視点を取りに行けてる？',
-        '投稿にはチップが出て、queued→processing→done で動くよ。',
+        '次に、投稿チップの流れを見てみよう。',
       ]);
+
+      const bPlay = mkBtn('チップを動かす', { kind:'primary' });
       const bPrev = mkBtn('戻る', { kind:'ghost' });
       const bNext = mkBtn('次へ');
-      setActions([bPrev, bNext]);
+
+      setActions([bPrev, bPlay, bNext]);
       bPrev.addEventListener('click', () => goto(1), { once:true });
+
+      bPlay.addEventListener('click', async () => {
+        const post = $("postHot");
+        if (post) {
+          post.classList.add('isTarget');
+          post.scrollIntoView({ behavior:'smooth', block:'center' });
+        }
+        await sleep(160);
+        await playChipFlow(post);
+        completeMission(2, 0);
+        await say([
+          'こんな感じで、queued→processing→done が動く。',
+          '終わったら自然に消える（残骸を残さない）。',
+        ], { clear:false, lineDelay:170 });
+      });
+
       await new Promise(r => bNext.addEventListener('click', r, { once:true }));
       return goto(3);
     }
 
-    // STEP 3: Spotlight demo
+    // STEP 3
     if (step === 3) {
       $('postHot')?.classList.add('isTarget');
       $('postHot')?.scrollIntoView({ behavior:'smooth', block:'center' });
       await sleep(160);
       await say([
-        '次はSpotlight。',
-        '感情が強くなりそうな投稿で、いったん選択肢を増やす。',
-        'どちらを押してもOK。ここでは練習！',
+        '次はSpotlight（介入UI）。',
+        '感情が強くなりそうな投稿で、いったん「選択肢」を増やす。',
+        'ここでは練習。どちらを押してもOK。',
       ]);
-      const bDo = mkBtn('Spotlightを体験');
+      const bDo = mkBtn('Spotlightを体験', { kind:'primary' });
       const bPrev = mkBtn('戻る', { kind:'ghost' });
       setActions([bPrev, bDo]);
       bPrev.addEventListener('click', () => goto(2), { once:true });
+
       await new Promise(r => bDo.addEventListener('click', r, { once:true }));
       const { choice } = await showSpotlightOnce({ allowXp:true });
+      completeMission(3, 0);
+
       await say([
         choice === 'search' ? '視点を増やす選択、ナイス。' : '距離を取る選択、ナイス。',
-        'この「落ち着いた選択」がXPになる。',
+        'こういう「落ち着いた選択」がXPになる。',
       ]);
-      const bNext = mkBtn('次へ');
+
+      const bNext = mkBtn('次へ', { kind:'primary' });
       setActions([bNext]);
       await new Promise(r => bNext.addEventListener('click', r, { once:true }));
       return goto(4);
     }
 
-    // STEP 4: Level / XP
+    // STEP 4
     if (step === 4) {
       const prog = await getProgress();
       setText($('hudLv'), prog.level || 1);
       setText($('hudXp'), prog.xp || 0);
+
       await say([
         'LV/XPは「良い使い方ができた回数」の目安。',
-        'Focusが高すぎると、XPが少し減衰することもあるよ。',
-        'GAMEタブで、解放（ティア）を眺められる。',
+        'GAMEでティア報酬を眺められる。',
+        '次のミッション：XPが増えるのを確認してみよう。',
       ]);
+
+      const bGain = mkBtn('+10XPしてみる', { kind:'primary' });
       const bPrev = mkBtn('戻る', { kind:'ghost' });
       const bNext = mkBtn('次へ');
-      setActions([bPrev, bNext]);
+      setActions([bPrev, bGain, bNext]);
+
       bPrev.addEventListener('click', () => goto(3), { once:true });
+
+      bGain.addEventListener('click', async () => {
+        const r = await addXp(10);
+        if (r && r.ok) {
+          setText($('hudLv'), r.level);
+          setText($('hudXp'), r.xp);
+          setText($('hudGain'), 10);
+        } else {
+          const p = await getProgress();
+          setText($('hudLv'), p.level || 1);
+          setText($('hudXp'), p.xp || 0);
+          setText($('hudGain'), 10);
+        }
+        completeMission(4, 0);
+        await say(['OK。数字が動けば勝ち。'], { clear:false, lineDelay:160 });
+      });
+
       await new Promise(r => bNext.addEventListener('click', r, { once:true }));
       return goto(5);
     }
 
-    // STEP 5: Finish
+    // STEP 5
     await say([
-      '準備OK。最後に「戻り方」と「困った時」。',
+      '準備OK。最後に「困った時」。',
       '① HOME BASE(Options) → PREPARE / WARMUP',
       '② 動かない時 → RESET BACKEND',
       '③ それでもダメならページをリロード',
@@ -400,23 +517,23 @@ async function main(){
 
     await markOnboardingDone();
 
-    const bHome = mkBtn('HOME BASEへ戻る');
+    const bHome = mkBtn('HOME BASEへ戻る', { kind:'primary' });
     const bX = mkBtn('Xを開く', { kind:'ghost' });
     setActions([bHome, bX]);
 
+    const doneAnd = () => completeMission(5, 0);
+
     bHome.addEventListener('click', async () => {
+      doneAnd();
       try { await chrome.runtime.openOptionsPage(); } catch (_e) {}
     }, { once:true });
 
     bX.addEventListener('click', async () => {
-      try {
-        const url = 'https://x.com/home';
-        await chrome.tabs.create({ url });
-      } catch (_e) {}
+      doneAnd();
+      try { await chrome.tabs.create({ url: 'https://x.com/home' }); } catch (_e) {}
     }, { once:true });
   };
 
-  // Nav wiring
   STEPS.forEach(s => {
     const n = $('nav' + s.id);
     n?.addEventListener('click', () => goto(s.id));
@@ -425,7 +542,6 @@ async function main(){
   setProgress(1);
   await goto(1);
 }
-
 
 main().catch((e) => {
   console.error(e);

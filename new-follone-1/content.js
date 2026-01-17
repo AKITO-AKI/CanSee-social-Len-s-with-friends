@@ -1325,6 +1325,23 @@ function openXSearch(q) {
     try { updateSpriteFromTask(); } catch (_) {}
   }
 
+
+  function formatSpotlightReason(cat, score, severity) {
+    const c = String(cat || '').trim();
+    const sevKey = (() => {
+      const v = String(severity || '').toLowerCase();
+      if (v === 'hard' || v === 'high' || v === '3') return '3';
+      if (v === 'normal' || v === 'mid' || v === '2') return '2';
+      if (v === 'low' || v === '1') return '1';
+      return v;
+    })();
+    const sevLabel = sevKey === '3' ? '強め' : (sevKey === '2' ? '中' : (sevKey === '1' ? '軽め' : ''));
+    const head = c ? `${c}の可能性` : '気になる投稿かも';
+    const tail = sevLabel ? `（${sevLabel}）` : '';
+    // one-line, no newlines
+    return (head + tail).replace(/\s+/g, ' ').trim();
+  }
+
   function openSpotlight(opts) {
     // Remember previous UI task label so we can restore after spotlight
     state._preSpotTask = state.taskLabel || "stand-by";
@@ -1354,7 +1371,7 @@ function openXSearch(q) {
       if (t) t.innerHTML = html || "";
       if (m) m.textContent = muted || "";
       if (b) b.textContent = badgeText || "注意";
-      if (s) s.textContent = subText || "介入";
+      if (s) s.textContent = (subText && String(subText).trim()) ? String(subText).trim() : formatSpotlightReason(cat, score, severity);
     } catch (_) {}
 
     // Target emphasis + interaction disable
@@ -1528,6 +1545,7 @@ function openXSearch(q) {
     // Gate: first classify attempt finished (used to hide loader after cold-start)
     _resolveFirstClassify: null,
     firstClassifyDone: null,
+    phase: -1,
     startTs: 0
   };
 
@@ -1570,6 +1588,7 @@ function openXSearch(q) {
     loader.shown = true;
     loader.waiting = false;
     loader.minDone = false;
+    loader.phase = -1;
 
     // Time-based minimum duration (ms)
     loader.durationMs = Math.max(900, Number(minMs || 0) || 0);
@@ -1586,8 +1605,9 @@ function openXSearch(q) {
     el.classList.add("show");
     lockScroll(true, document.querySelector("main") || document.querySelector("[role='main']") || document.body.firstElementChild);
     setLoaderBrand(loader.kind === "boot" ? "CanSee" : "Now analyzing");
-    setLoaderSubtitle(loader.kind === "boot" ? "起動中" : "Now analyzing");
-    setLoaderQuote(loader.kind === "boot" ? "少しだけ…待ってて。" : "ちょい待ち。分析するね。");
+    // Stage 0 (logo)
+    setLoaderSubtitle(loader.kind === "boot" ? "ロゴ表示中" : "Now analyzing");
+    setLoaderQuote(loader.kind === "boot" ? "CanSee を起動してるよ。" : "ちょい待ち。分析するね。");
 
     const left = document.getElementById("follone-loader-meta-left");
     if (left) left.textContent = metaLeft || (loader.kind === "boot" ? "startup" : "loading");
@@ -1601,11 +1621,27 @@ function openXSearch(q) {
       const p = Math.max(0, Math.min(1, (elapsed / loader.durationMs)));
       setLoaderProgress(p);
 
+      // Stage transitions (boot): logo -> wait -> analyzing
+      if (loader.kind === 'boot' && !loader.minDone) {
+        const phase = (p < 0.22) ? 0 : 1;
+        if (loader.phase !== phase) {
+          loader.phase = phase;
+          if (phase === 0) {
+            setLoaderSubtitle('ロゴ表示中');
+            setLoaderQuote('CanSee を起動してるよ。');
+          } else {
+            setLoaderSubtitle('待ってね…');
+            setLoaderQuote('初回解析の準備中。すぐ始めるよ。');
+          }
+        }
+      }
+
       if (p >= 1 && !loader.minDone) {
         loader.minDone = true;
         // After minimum time, stay visible until gate is released (or max wait reached)
         loader.waiting = true;
-        setLoaderSubtitle("初回解析中…");
+        loader.phase = 2;
+        setLoaderSubtitle("解析中…");
         setLoaderQuote("できるだけ早く返すね。");
         // Stop animating at 100% to avoid wasting CPU
         if (loader.raf) cancelAnimationFrame(loader.raf);
@@ -1633,6 +1669,7 @@ function setLoaderProgress(progress) {
     loader.shown = false;
     loader.waiting = false;
     loader.minDone = false;
+    loader.phase = -1;
     if (loader.raf) cancelAnimationFrame(loader.raf);
     if (loader.timer) clearTimeout(loader.timer);
     loader.timer = 0;

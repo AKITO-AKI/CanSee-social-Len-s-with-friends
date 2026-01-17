@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TUTORIAL | follone for X</title>
+  <title>TUTORIAL | CanSee</title>
   <link rel="stylesheet" href="tutorial.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="tTop">
       <div class="tBrand">
         <div class="tKicker">TUTORIAL</div>
-        <div class="tSub">はじめての使い方ガイド</div>
+        <div class="tSub">はじめての使い方ガイド（練習用）</div>
       </div>
       <div class="tProg" aria-label="進行状況">
         <div class="tProgTop">
@@ -37,7 +37,6 @@
           <div class="tTlNote">※練習用／実際のXには影響しません</div>
         </div>
 
-        <!-- Mock Overlay panel (Chapter 1) -->
         <div class="tOverlayDemo" id="overlayDemo" aria-label="Overlayの例">
           <div class="tOHead">
             <div class="tOLogo">CanSee</div>
@@ -74,7 +73,6 @@
           <button class="tNavItem" type="button" data-step="5" id="nav5"><b>5</b><span>FINISH</span></button>
         </div>
 
-        <!-- Character guide (tutorial-like overlay) --> (tutorial-like overlay) -->
         <div class="tGuide" id="guideCard" role="note" aria-label="ガイド">
           <div class="tGuidePet">
             <canvas id="guidePet" width="64" height="64" aria-label="キャラ"></canvas>
@@ -86,15 +84,20 @@
           </div>
         </div>
 
+        <div class="tCard" id="missionCard" aria-label="ミッション">
+          <div class="tCardTitle">このステップでやること</div>
+          <ul class="tMission" id="missionList"></ul>
+          <div class="tMissionFoot" id="missionFoot">完了するとチェックが付きます。</div>
+        </div>
+
         <div class="tCard tMuted" id="tipCard">
           <div class="tTipTitle">ヒント</div>
-          <div class="tTipText">このページは練習用。実際のXには影響しません。</div>
+          <div class="tTipText">右のステップ番号でいつでも戻れます。途中で閉じても再開できます。</div>
         </div>
       </aside>
     </main>
   </div>
 
-  <!-- Spotlight modal -->
   <div class="tSpotVeil" id="spotVeil">
     <div class="tSpot" role="dialog" aria-modal="true" aria-label="Spotlight">
       <div class="tSpotTitle">Spotlight</div>
@@ -106,7 +109,6 @@
     </div>
   </div>
 
-  <!-- PetEngine (for the guide avatar) -->
   <script src="pet/PetEngine.js"></script>
   <script src="tutorial.js"></script>
 </body>
