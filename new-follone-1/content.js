@@ -518,7 +518,10 @@
 
     processed: new WeakSet(),
     queue: [],
+    // Cache by tweetId (latest) and by postKey (exact)
     riskCache: new Map(),
+    riskCacheByKey: new Map(),
+    latestKeyById: new Map(), // tweetId -> postKey
     elemById: new Map(),
 
     // Highlight / intervention gating
@@ -528,12 +531,13 @@
 
 
     // v0.4.10 pre-analysis pipeline
+    // NOTE: use postKey (tweetId:textHash) so edits on same tweetId can re-run
     sentForAnalysis: new Set(),
     intervenedIds: new Set(),
     analyzeHigh: [],
     analyzeLow: [],
     // Phase29-B: queue state machine meta (pending/processing/done/failed)
-    queueMetaById: new Map(), // id -> {status, tries, enqueuedAt, startTs, endTs, lastError, seq, y}
+    queueMetaByKey: new Map(), // postKey -> {status, tries, enqueuedAt, startTs, endTs, lastError, seq, y, tweetId}
     queueDoneTs: [], // timestamps when an item becomes done (for throughput)
     discoverQueue: [],
     discoverScheduled: false,
@@ -543,11 +547,11 @@
     // v0.4.12: queue upgrade/dedupe helpers
     pendingPriority: new Map(),
     enqSeq: 0,
-    seqById: new Map(),
-    canceledIds: new Set(),
+    seqByKey: new Map(),
+    canceledKeys: new Set(),
 
     // v0.4.12: hash caches
-    hashById: new Map(),
+    hashByKey: new Map(),
     hashCache: new Map(),
 
     // persistent cache shadow
@@ -1006,17 +1010,25 @@ async function storageGetSafe(keys) {
     if (!id || !h) return;
     const pc = ensurePersistentCache();
     pc.id2h[id] = h;
-    state.hashById.set(id, h);
+    state.hashByKey.set(id, h);
   }
 
   function getHashForId(id) {
     if (!id) return "";
-    const h = state.hashById.get(id);
+    const h = state.hashByKey.get(id);
     if (h) return h;
     const pc = ensurePersistentCache();
     const hh = pc && pc.id2h ? pc.id2h[id] : "";
-    if (hh) state.hashById.set(id, hh);
+    if (hh) state.hashByKey.set(id, hh);
     return hh || "";
+  }
+
+  // --- postKey helpers (tweetId + textHash)
+  function computePostKey(tweetId, text){
+    const id = String(tweetId || "");
+    const norm = normalizeForHash(String(text || ""));
+    const h = fnv1a32(norm);
+    return id ? (id + ":" + h) : ("" + h);
   }
 
   let cacheLoaded = false;
@@ -1025,6 +1037,11 @@ async function storageGetSafe(keys) {
   function ensureRuntimeMaps() {
     // Defensive: avoid crashes if any runtime containers were lost due to partial reload / navigation churn.
     if (!state.riskCache || typeof state.riskCache.get !== "function") state.riskCache = new Map();
+    if (!state.riskCacheByKey || typeof state.riskCacheByKey.get !== "function") state.riskCacheByKey = new Map();
+    if (!state.latestKeyById || typeof state.latestKeyById.get !== "function") state.latestKeyById = new Map();
+    if (!state.retryCounts || typeof state.retryCounts.get !== "function") state.retryCounts = new Map();
+    if (!state.queueMetaByKey || typeof state.queueMetaByKey.get !== "function") state.queueMetaByKey = new Map();
+    if (!state.canceledKeys || typeof state.canceledKeys.has !== "function") state.canceledKeys = new Set();
     if (!state.elemById || typeof state.elemById.get !== "function") state.elemById = new Map();
 
     if (!state.sentForAnalysis || typeof state.sentForAnalysis.has !== "function") state.sentForAnalysis = new Set();
@@ -1039,8 +1056,8 @@ async function storageGetSafe(keys) {
     if (typeof state.analyzeScheduled !== "boolean") state.analyzeScheduled = false;
 
     if (!state.pendingPriority || typeof state.pendingPriority.get !== "function") state.pendingPriority = new Map();
-    if (!state.seqById || typeof state.seqById.get !== "function") state.seqById = new Map();
-    if (!state.hashById || typeof state.hashById.get !== "function") state.hashById = new Map();
+    if (!state.seqByKey || typeof state.seqByKey.get !== "function") state.seqByKey = new Map();
+    if (!state.hashByKey || typeof state.hashByKey.get !== "function") state.hashByKey = new Map();
     if (!state.hashCache || typeof state.hashCache.get !== "function") state.hashCache = new Map();
     if (!state.topicCounts || typeof state.topicCounts.get !== "function") state.topicCounts = new Map();
   }
@@ -1061,7 +1078,7 @@ async function storageGetSafe(keys) {
     const h = String(textHash || "");
     if (h) {
       state.hashCache.set(h, value);
-      state.hashById.set(id, h);
+      state.hashByKey.set(id, h);
     }
     // no storage writes
   }
@@ -1076,6 +1093,7 @@ async function storageGetSafe(keys) {
     const reasons = Array.isArray(r.reasons) ? r.reasons.slice(0, 2).map(x => String(x)) : [];
     return {
       id: String(r.id || ""),
+      tweetId: String(r.tweetId || ""),
       riskScore: Number(r.riskScore || 0),
       riskCategory: String(r.riskCategory || "なし"),
       topicCategory: String(r.topicCategory || "その他"),
@@ -3261,6 +3279,15 @@ function installSearchLoaderHook() {
 
     // Try offscreen Prompt API backend first (extension origin).
     if (settings.aiMode === "auto") {
+      // Use postKey (tweetId + textHash) for backend IDs to avoid collisions and allow re-analysis when text changes.
+      const keyToTweetId = new Map();
+      const backendBatch = batch.map((p) => {
+        const key = String(p && p.key || p && p.id || "");
+        const tweetId = String(p && p.id || "");
+        if (key && tweetId) keyToTweetId.set(key, tweetId);
+        // Keep only fields the backend cares about; include tweetId for debugging.
+        return { id: key, tweetId, text: String(p && p.text || ""), username: p && p.username, displayName: p && p.displayName, createdAt: p && p.createdAt, meta: p && p.meta };
+      });
       try {
         const t0 = performance.now();
         setTask("classing");
@@ -3270,7 +3297,7 @@ function installSearchLoaderHook() {
         // Use a longer timeout and DO NOT retry to avoid duplicate classifications.
         const resp = await sendMessageSafeRetry({
           type: "FOLLONE_CLASSIFY_BATCH",
-          batch,
+          batch: backendBatch,
           topicList: settings.topics,
           prefs: { fastMode: settings.fastMode, useConstraint: settings.useConstraint, characterId: normalizeCharId(settings.characterId) },
         }, { attempts: 1, timeoutMs: 65000 });
@@ -3298,7 +3325,7 @@ const dt = Math.round(performance.now() - t0);
           signalFirstClassifyDone({ ok: true, engine: state.lastEngine, latencyMs: state.lastLatencyMs });
           // Defensive: some models can output an empty/partial array while still matching schema.
           // Ensure we return exactly one result per input post so UI/BIAS can update.
-          const wantIds = batch.map(p => String(p && p.id)).filter(Boolean);
+          const wantIds = backendBatch.map(p => String(p && p.id)).filter(Boolean);
           const got = Array.isArray(resp.results) ? resp.results : [];
           const map = new Map();
           for (const r of got) { if (r && r.id) map.set(String(r.id), r); }
@@ -3306,12 +3333,17 @@ const dt = Math.round(performance.now() - t0);
             const r = map.get(id);
             if (r) return r;
             // fallback to a safe mock classification (non-harmful, just for UI continuity)
-            return mockClassifyOne({ id, text: (batch.find(x => String(x && x.id) === id)?.text || "") });
+            return mockClassifyOne({ id, text: (backendBatch.find(x => String(x && x.id) === id)?.text || "") });
           });
           if (!got.length && wantIds.length) {
             log("warn", "[AI]", "backend returned empty results; using fallback mock for UI", { n: wantIds.length });
           }
-          return filled;
+          const mapped = filled.map((r) => {
+            const key = String(r && r.id || "");
+            const tweetId = keyToTweetId.get(key) || key.split(":")[0] || key;
+            return { ...r, _key: key, id: tweetId };
+          });
+          return mapped;
         } else if (resp) {
           setError("BACKEND_NOT_OK", String(resp?.status || resp?.availability || "unknown"));
           log("warn","[AI]","backend not ok -> empty", { status: resp.status, availability: resp.availability, engine: resp.engine, error: resp.error });
@@ -3785,8 +3817,18 @@ const dt = Math.round(performance.now() - t0);
     ensureRuntimeMaps();
     if (!post || !post.id) return;
 
-    // If we already have a result, no need to analyze.
-    if (!settings.forceLLM && state.riskCache.has(post.id)) return;
+    // Compute postKey (tweetId + textHash) early, so we can allow re-analysis when the text changes.
+    const norm = normalizeForHash(post.text || "");
+    const textHash = norm ? fnv1a32(norm) : "";
+    const postKey = post.id ? (String(post.id) + ":" + String(textHash || "")) : computePostKey(post.id, post.text);
+    post.key = postKey;
+    post.textHash = String(textHash || (postKey.split(":")[1] || ""));
+    state.latestKeyById.set(post.id, postKey);
+    try { post.elem.dataset.folloneKey = postKey; } catch (_) {}
+    if (textHash) setIdHash(postKey, textHash);
+
+    // If we already have a result for this exact postKey, no need to analyze.
+    if (!settings.forceLLM && state.riskCacheByKey.has(postKey)) return;
 
     // Stable ordering: top -> bottom (y asc), then enqueue sequence.
     let y = 0;
@@ -3795,21 +3837,21 @@ const dt = Math.round(performance.now() - t0);
       if (r) y = (window.scrollY || 0) + r.top;
     } catch (_) {}
 
-    const norm = normalizeForHash(post.text || "");
-    const textHash = norm ? fnv1a32(norm) : "";
-    if (textHash) setIdHash(post.id, textHash);
 
     // Hash cache fast path (id-independent reuse) — disabled in dev forceLLM mode
-    if (!settings.forceLLM && textHash && !state.riskCache.has(post.id)) {
+    if (!settings.forceLLM && textHash && !state.riskCacheByKey.has(postKey)) {
       const cached = state.hashCache.get(textHash);
       if (cached) {
-        const res = { ...cached, id: post.id };
-        state.riskCache.set(post.id, res);
+        const res = { ...cached, id: post.id, tweetId: post.id, _key: postKey };
+        state.riskCacheByKey.set(postKey, res);
+        state.latestKeyById.set(post.id, postKey);
+        state.riskCache.set(post.id, res); // latest for UI
         state.elemById.set(post.id, post.elem);
         try { post.elem.dataset.folloneId = post.id; } catch (_) {}
+        try { post.elem.dataset.folloneKey = postKey; } catch (_) {}
         try { maybeAttachIdTag(post.elem, post.id); } catch (_) {}
-        touchPersistentCache(post.id, shrinkResultForCache(res), textHash);
-        log("debug", "[CACHE]", "hit(hash)", { id: post.id, h: textHash });
+        touchPersistentCache(postKey, shrinkResultForCache({ ...res, id: postKey, tweetId: post.id }), textHash);
+        log("debug", "[CACHE]", "hit(hash)", { tweetId: post.id, key: postKey, h: textHash });
         return;
       }
     }
@@ -3827,24 +3869,24 @@ const dt = Math.round(performance.now() - t0);
     }
 
     // Already queued/sent: do not enqueue twice (avoids infinite re-analysis)
-    if (state.sentForAnalysis.has(post.id)) {
-      log("debug", "[QUEUE]", "skip(already_sent)", { id: post.id });
+    if (state.sentForAnalysis.has(postKey)) {
+      log("debug", "[QUEUE]", "skip(already_sent)", { id: post.id, key: postKey });
       return;
     }
 
-    state.sentForAnalysis.add(post.id);
+    state.sentForAnalysis.add(postKey);
 
     const seq = ++state.enqSeq;
-    state.seqById.set(post.id, seq);
+    state.seqByKey.set(postKey, seq);
     post.seq = seq;
     post.y = y;
-    state.canceledIds.delete(post.id);
+    state.canceledKeys.delete(postKey);
     state.elemById.set(post.id, post.elem);
-    // Phase29-B: register queue meta
+    // Phase29-B: register queue meta (keyed)
     try {
-      const rc = state.retryCounts.get(post.id) || 0;
-      ensureQueueMeta(post.id, { seq, y });
-      markQueueStatus(post.id, 'pending', { tries: rc });
+      const rc = state.retryCounts.get(postKey) || 0;
+      ensureQueueMeta(postKey, { seq, y, tweetId: post.id });
+      markQueueStatus(postKey, 'pending', { tries: rc });
     } catch(_e) {}
 
     try { post.elem.dataset.folloneId = post.id; } catch (_) {}
@@ -3863,12 +3905,12 @@ const QUEUE_SNAPSHOT_KEY = "cansee_queueSnapshot";
 const MAX_INFLIGHT_BATCHES = 1; // controlled concurrency (API safety)
 const MAX_RETRY = 3;
 
-function ensureQueueMeta(id, seed){
-  if (!id) return null;
-  const m = state.queueMetaById.get(id);
+function ensureQueueMeta(postKey, seed){
+  if (!postKey) return null;
+  const m = state.queueMetaByKey.get(postKey);
   if (m) return m;
   const base = {
-    id,
+    key: postKey,
     status: "pending", // pending | processing | done | failed
     tries: 0,
     enqueuedAt: nowMs(),
@@ -3882,12 +3924,12 @@ function ensureQueueMeta(id, seed){
     if (seed.seq) base.seq = seed.seq;
     if (seed.y) base.y = seed.y;
   }
-  state.queueMetaById.set(id, base);
+  state.queueMetaByKey.set(postKey, base);
   return base;
 }
 
-function markQueueStatus(id, status, extra){
-  const m = ensureQueueMeta(id);
+function markQueueStatus(postKey, status, extra){
+  const m = ensureQueueMeta(postKey);
   if (!m) return;
   m.status = status;
   if (extra && typeof extra === "object"){
@@ -3918,7 +3960,7 @@ function scheduleQueueSnapshot(delay){
 function updateQueueSnapshot(){
   try{
     const now = nowMs();
-    const metaVals = Array.from(state.queueMetaById.values());
+    const metaVals = Array.from(state.queueMetaByKey.values());
     let pending = 0, processing = 0, done = 0, failed = 0;
     for (const m of metaVals){
       if (!m || !m.status) continue;
@@ -3962,7 +4004,7 @@ function choosePriorityBatch(maxN) {
     const q = state.analyzeLow;
     if (!q.length) return { batch: [] };
 
-    const candidates = q.filter(p => p && p.id && !state.canceledIds.has(p.id));
+    const candidates = q.filter(p => p && p.id && p.key && !state.canceledKeys.has(p.key));
     if (!candidates.length) return { batch: [] };
 
     const score = (p) => {
@@ -3981,15 +4023,15 @@ function choosePriorityBatch(maxN) {
     });
 
     const batch = [];
-    const takeIds = new Set();
+    const takeKeys = new Set();
     for (const p of sorted) {
       if (batch.length >= max) break;
       batch.push(p);
-      takeIds.add(p.id);
+      takeKeys.add(p.key);
     }
     if (!batch.length) return { batch: [] };
 
-    state.analyzeLow = q.filter(p => !takeIds.has(p?.id));
+    state.analyzeLow = q.filter(p => !takeKeys.has(p?.key));
     state.analyzeHigh = [];
 
     return { batch };
@@ -4041,15 +4083,15 @@ function choosePriorityBatch(maxN) {
             // Requeue posts (retry up to 3)
             for (const p of batch) {
               if (!p || !p.id) continue;
-              const n = (state.retryCounts.get(p.id) || 0) + 1;
-              state.retryCounts.set(p.id, n);
+              const n = (state.retryCounts.get(p.key) || 0) + 1;
+              state.retryCounts.set(p.key, n);
               if (n <= 3) {
                 // put back to the front so we keep "top priority"
                 state.analyzeLow.unshift(p);
-                try { markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
+                try { markQueueStatus(p.key, "pending", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
                 markChip(p.elem, `retry ${n}/3`, "retry");
               } else {
-                try { markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
+                try { markQueueStatus(p.key, "failed", { tries: n, endTs: nowMs(), lastError: E.E02 }); } catch(_e) {}
                 markChip(p.elem, `error ${E.E02}`, "error");
               }
             }
@@ -4142,31 +4184,42 @@ function choosePriorityBatch(maxN) {
     state.inFlightBatch = batch.slice();
     // Phase29-B: mark processing
     try {
-      for (const p of batch){ if (p && p.id) markQueueStatus(p.id, 'processing', { startTs: nowMs() }); }
+      for (const p of batch) {
+        if (p && p.key) markQueueStatus(p.key, 'processing', { startTs: nowMs() });
+      }
     } catch(_e) {}
 
     pushEvent("inflight_start", { n: batch.length });
     try {
-      log("info", "[CLASSIFY]", "batch", batch.map(x => x.id), { maxN, backlog });
+      log("info", "[CLASSIFY]", "batch", batch.map(x => x.key || x.id), { maxN, backlog });
       const results = await classifyBatch(batch);
       if (state.runtimePaused || (state.pauseEpoch || 0) !== epoch) {
         log("debug","[CLASSIFY]","discarded due to pause", { paused: state.runtimePaused });
         return;
       }
-      log("info", "[CLASSIFY]", "results", results.map(x => ({ id: x.id, risk: x.riskScore, cat: x.riskCategory, topic: x.topicCategory })));
+      log("info", "[CLASSIFY]", "results", results.map(x => ({ id: x.id, key: x._key, risk: x.riskScore, cat: x.riskCategory, topic: x.topicCategory })));
 
       if (results.length) /* time-based loader */
 
       for (const r of results) {
         if (!r || !r.id) continue;
-        state.riskCache.set(r.id, r);
-        try { markQueueStatus(r.id, 'done', { endTs: nowMs(), lastError: null }); } catch(_e) {}
+        const tweetId = String(r.id);
+        const postKey = String(r._key || "");
 
+        // Cache: latest by tweetId + exact by postKey
+        state.riskCache.set(tweetId, r);
+        if (postKey) {
+          state.riskCacheByKey.set(postKey, r);
+          state.latestKeyById.set(tweetId, postKey);
+        }
 
+        try { markQueueStatus(postKey || tweetId, 'done', { endTs: nowMs(), lastError: null }); } catch(_e) {}
+        try { state.retryCounts.delete(postKey || tweetId); } catch(_e) {}
         // Persist (id + text-hash)
         try {
-          const h = getHashForId(r.id);
-          touchPersistentCache(r.id, shrinkResultForCache(r), h);
+          const cacheId = postKey || tweetId;
+          const h = getHashForId(cacheId);
+          touchPersistentCache(cacheId, shrinkResultForCache({ ...r, tweetId }), h);
         } catch (_e) {}
 
 
@@ -4197,15 +4250,15 @@ function choosePriorityBatch(maxN) {
         const batch = state.inFlightBatch || [];
         for (const p of batch) {
           if (!p || !p.id) continue;
-          const n = (state.retryCounts.get(p.id) || 0) + 1;
-          state.retryCounts.set(p.id, n);
+          const n = (state.retryCounts.get(p.key) || 0) + 1;
+          state.retryCounts.set(p.key, n);
           if (n <= MAX_RETRY) {
             // keep priority: put back to front
             state.analyzeLow.unshift(p);
-            markQueueStatus(p.id, "pending", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+            markQueueStatus(p.key, "pending", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
             markChip(p.elem, `retry ${n}/${MAX_RETRY}`, "retry");
           } else {
-            markQueueStatus(p.id, "failed", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
+            markQueueStatus(p.key, "failed", { tries: n, endTs: nowMs(), lastError: String(code || "E??") });
             markChip(p.elem, `error ${code}`, "error");
           }
         }
