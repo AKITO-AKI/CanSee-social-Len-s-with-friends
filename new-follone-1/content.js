@@ -342,6 +342,18 @@
         box.remove();
       });
 
+
+      // If this is the tutorial/demo state, treat it as a lightweight demo:
+      // both buttons just dismiss (so the user is never stuck on X).
+      if (kind !== 'ai') {
+        try { btnOptions.textContent = 'OK'; } catch (_) {}
+        try { btnTutorial.textContent = 'OK'; } catch (_) {}
+        try {
+          btnOptions.onclick = () => { box.remove(); };
+          btnTutorial.onclick = () => { box.remove(); };
+        } catch (_) {}
+      }
+
       row.append(btnDismiss, btnOptions, btnTutorial);
       box.append(t, p, row);
       document.documentElement.appendChild(box);
@@ -1506,6 +1518,7 @@ function openXSearch(q) {
     state.spotlightOpen = false;
     state.spotlightId = null;
     state.spotlightElem = null;
+    state.spotlightDemo = false;
     try { updateSpriteFromTask(); } catch (_) {}
   }
 
@@ -1542,6 +1555,7 @@ function openXSearch(q) {
     setTask("highlighting");
     try { scrollElementToCenter(elem, { behavior: "smooth" }); } catch (_) {}
     state.spotlightOpen = true;
+    state.spotlightDemo = !!(opts && opts.demo);
     state.spotlightId = String(id || "");
     state.spotlightElem = elem;
     try { updateSpriteFromTask(); } catch (_) {}
@@ -1645,6 +1659,10 @@ function openXSearch(q) {
     const btnSettings = document.getElementById("follone-sp-settings");
     const btnCont = document.getElementById("follone-sp-continue");
     if (btnBack) btnBack.onclick = () => {
+      if (state.spotlightDemo) {
+        closeSpotlight("demo");
+        return;
+      }
       // Safety habit: step back from heated content
       recordEvent("safety_pause");
       closeSpotlight("back");
@@ -1657,6 +1675,10 @@ function openXSearch(q) {
       window.scrollBy({ top: -Math.min(900, window.innerHeight), behavior: "smooth" });
     };
     if (btnSearch) btnSearch.onclick = () => {
+      if (state.spotlightDemo) {
+        closeSpotlight("demo");
+        return;
+      }
       // Safety habit: broaden perspective
       const list = Array.isArray(searches) ? searches : [];
       const q = list[0] || "良いニュース";
@@ -1665,6 +1687,10 @@ function openXSearch(q) {
       try { addXp(xpForIntervention(severity) + 2); } catch (_) {}
     };
     if (btnSettings) btnSettings.onclick = () => {
+      if (state.spotlightDemo) {
+        closeSpotlight("demo");
+        return;
+      }
       // Safety habit: adjust settings / learn how the system works
       recordEvent("settings_open");
       closeSpotlight("settings");
@@ -1672,6 +1698,10 @@ function openXSearch(q) {
       try { openOptions(); } catch (_) {}
     };
     if (btnCont) btnCont.onclick = () => {
+      if (state.spotlightDemo) {
+        closeSpotlight("demo");
+        return;
+      }
       // Neutral action (no quest credit)
       closeSpotlight("continue");
       try { addXp(1); } catch (_) {}

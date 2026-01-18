@@ -1325,3 +1325,41 @@
   box-shadow: none;
 }
 #follone-limitPopup .lp-btn:active{ transform: translateY(1px); }
+
+
+/* --- Spotlight buttons: more yume-kawa, clearer --- */
+#follone-sp-back,
+#follone-sp-search,
+#follone-sp-settings,
+#follone-sp-continue{
+  min-height: 34px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 103, 255, 0.25);
+  box-shadow: 0 6px 18px rgba(93, 71, 255, 0.10);
+  letter-spacing: 0.2px;
+  font-weight: 900;
+}
+#follone-sp-back,
+#follone-sp-search,
+#follone-sp-settings{
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.48));
+  color: rgba(20, 14, 34, 0.80);
+}
+#follone-sp-continue{
+  background: linear-gradient(180deg, rgba(162, 137, 255, 0.95), rgba(123, 97, 255, 0.85));
+  color: rgba(255,255,255,0.98);
+}
+#follone-sp-back:hover,
+#follone-sp-search:hover,
+#follone-sp-settings:hover,
+#follone-sp-continue:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(93, 71, 255, 0.16);
+}
+#follone-sp-back:active,
+#follone-sp-search:active,
+#follone-sp-settings:active,
+#follone-sp-continue:active{
+  transform: translateY(0px) scale(0.99);
+}

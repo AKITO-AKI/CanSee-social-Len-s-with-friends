@@ -844,7 +844,59 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
   // -----------------------------
   // Rendering
   // -----------------------------
-  function setView(view) {
+  // -----------------------------
+  // Onboarding gate (force tutorial)
+  // -----------------------------
+  function openTutorialTabSafe() {
+    // Prefer chrome.tabs.create so it opens as a real tab (less likely to be blocked)
+    try {
+      if (hasChrome() && chrome && chrome.tabs && chrome.tabs.create) {
+        const url = chrome.runtime.getURL('tutorial.html');
+        chrome.tabs.create({ url });
+        return true;
+      }
+    } catch (e) {
+      console.warn('[options] open tutorial failed', e);
+    }
+    try {
+      const url = (hasChrome() && chrome && chrome.runtime && chrome.runtime.getURL)
+        ? chrome.runtime.getURL('tutorial.html')
+        : 'tutorial.html';
+      window.open(url, '_blank', 'noopener');
+      return true;
+    } catch (_) {}
+    return false;
+  }
+
+  function isTutorialGateView(v) {
+    const view = String(v || '').trim();
+    if (!view) return false;
+    // Allow HOME / SETTINGS while onboarding is incomplete
+    if (view === 'home' || view === 'settings' || view === 'dev') return false;
+    return true;
+  }
+
+  let _tutorialOpenDebounce = 0;
+
+  function enforceTutorialGate(nextView) {
+    if (app.data.onboardingDone) return false;
+    if (!isTutorialGateView(nextView)) return false;
+    // Show a short nudge message
+    try { speak('まずはTUTORIALを1分だけ。使い方が分かるよ。', (app.data.characterId || 'PET').toUpperCase()); } catch (_) {}
+    try { pushCmdLine('SYS', 'TUTORIALを先に完了しよう'); } catch (_) {}
+    const now = Date.now();
+    if (now - _tutorialOpenDebounce > 1200) {
+      _tutorialOpenDebounce = now;
+      openTutorialTabSafe();
+    }
+    return true;
+  }
+
+function setView(view) {
+    if (enforceTutorialGate(view)) {
+      // Keep user on HOME while tutorial is incomplete.
+      view = 'home';
+    }
     if (!view) view = 'home';
     const prevView = app.view;
     if (prevView === view) return;
@@ -2752,10 +2804,12 @@ function bootPet() {
 
     const goto = (v) => {
       setView(v);
-      if (v === 'bias') renderBias();
-      if (v === 'quest') renderQuest();
-      if (v === 'log') renderLog();
-      if (v === 'rpg') renderRpg();
+      if (app.view === v) {
+        if (v === 'bias') renderBias();
+        if (v === 'quest') renderQuest();
+        if (v === 'log') renderLog();
+        if (v === 'rpg') renderRpg();
+      }
       if (v === 'dev') { renderDev(); }
     };
 
@@ -3212,7 +3266,9 @@ function bootPet() {
       btn.addEventListener('click', () => {
         const v = btn.dataset.open;
         if (!v) return;
+        if (enforceTutorialGate(v)) return;
         setView(v);
+        if (app.view !== v) return;
         if (v === 'bias') renderBias();
         if (v === 'quest') renderQuest();
         if (v === 'log') renderLog();
@@ -3224,7 +3280,9 @@ function bootPet() {
       card.addEventListener('click', () => {
         const v = card.dataset.open;
         if (!v) return;
+        if (enforceTutorialGate(v)) return;
         setView(v);
+        if (app.view !== v) return;
         if (v === 'bias') renderBias();
         if (v === 'quest') renderQuest();
         if (v === 'log') renderLog();
@@ -3239,7 +3297,9 @@ function bootPet() {
       el.addEventListener('click', () => {
         const v = el.dataset.open;
         if (!v) return;
+        if (enforceTutorialGate(v)) return;
         setView(v);
+        if (app.view !== v) return;
         if (v === 'bias') renderBias();
         if (v === 'quest') renderQuest();
         if (v === 'log') renderLog();
@@ -3285,7 +3345,7 @@ if (dom.btnBack) dom.btnBack.addEventListener('click', () => setView('home'));
       e.stopPropagation();
       if (!hasChrome()) return;
       try {
-        chrome.tabs.create({ url: chrome.runtime.getURL('tutorial.html') });
+        openTutorialTabSafe();
       } catch (err) {
         console.warn('[options] open tutorial failed', err);
       }
@@ -4091,7 +4151,8 @@ function bindInventoryButtons() {
     });
   }
   if (dom.btnOpenQuest) {
-    dom.btnOpenQuest.addEventListener('click', () => { setView('quest'); renderQuest(); });
+    dom.btnOpenQuest.addEventListener('click', () => { setView('quest');
+      if (app.view !== 'quest') return; renderQuest(); });
   }
 
   if (dom.btnDevLvMax) {
