@@ -13,6 +13,70 @@
   const $ = (sel, root=document) => root.querySelector(sel);
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)||0));
 
+  // -----------------------------
+  // Canvas normalization / visibility
+  // - Fix blurry / mis-sized charts when CSS scales canvas.
+  // - Skip drawing when hidden (prevents NaN sizes).
+  // -----------------------------
+  function isCanvasVisible(canvas) {
+    if (!canvas || !(canvas instanceof HTMLCanvasElement)) return false;
+    const st = getComputedStyle(canvas);
+    if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity||'1') === 0) return false;
+    const r = canvas.getBoundingClientRect();
+    if (!r || r.width < 8 || r.height < 8) return false;
+    // If it's completely outside viewport, skip heavy draw.
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    if (vw && vh) {
+      if (r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) return false;
+    }
+    return true;
+  }
+
+  function normalizeCanvas(canvas) {
+    if (!canvas || !(canvas instanceof HTMLCanvasElement)) return null;
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const r = canvas.getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(r.width));
+    const cssH = Math.max(1, Math.round(r.height));
+    const pxW = Math.max(1, Math.round(cssW * dpr));
+    const pxH = Math.max(1, Math.round(cssH * dpr));
+
+    const key = `${pxW}x${pxH}@${dpr}`;
+    if (canvas.dataset.__normKey !== key) {
+      canvas.width = pxW;
+      canvas.height = pxH;
+      canvas.dataset.__normKey = key;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    // Draw in CSS pixels.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, W: cssW, H: cssH, dpr };
+  }
+
+  function normalizeAllCanvases(root=document) {
+    $$('.cansee-cv, canvas', root).forEach((cv) => {
+      if (!(cv instanceof HTMLCanvasElement)) return;
+      if (!isCanvasVisible(cv)) return;
+      normalizeCanvas(cv);
+    });
+  }
+
+  function ensureCanvasFrameStyle() {
+    if (document.getElementById('cansee-canvas-frame-style')) return;
+    const style = document.createElement('style');
+    style.id = 'cansee-canvas-frame-style';
+    style.textContent = `
+      /* yume-kawa dotted frame for charts */
+      .cansee-cv{ border-radius: 18px; background: rgba(255,255,255,0.55); }
+      .cansee-cv{ border: 2px dotted rgba(155,135,255,0.34); box-shadow: 0 10px 26px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.75); }
+      [data-char="likoris"] .cansee-cv{ border-color: rgba(253,107,152,0.34); }
+      .cansee-cv{ outline: 1px solid rgba(0,0,0,0.05); outline-offset: -6px; }
+    `;
+    document.head.appendChild(style);
+  }
+
   // ------------------------------------------------------------
   // Hotfix helpers
   // - Some recent merges accidentally removed isoDate(), which broke init.
@@ -236,13 +300,22 @@
   // -----------------------------
   // Canvas charts (ring-pie)
   // -----------------------------
-  function drawRingPie(canvas, value01, labelTop, labelBottom) {
+  // Draw a ring chart. Optional `colors` overrides allow per-metric palette.
+  // colors: { ring?: string, glow?: string }
+  function drawRingPie(canvas, value01, labelTop, labelBottom, colors) {
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Normalize to avoid blur / wrong sizes.
+    if (!isCanvasVisible(canvas)) return;
+    const norm = normalizeCanvas(canvas);
+    if (!norm) return;
+    const { ctx, W, H } = norm;
 
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.width, H = canvas.height;
+    // Pull theme accent from CSS vars (supports character switch).
+    const rs = getComputedStyle(document.documentElement);
+    const accent = (rs.getPropertyValue('--accent') || '#9b87ff').trim();
+    const accent2 = (rs.getPropertyValue('--accent2') || '#c3b8ff').trim();
+    const ring = (colors && colors.ring) ? colors.ring : accent2;
+    const glow = (colors && colors.glow) ? colors.glow : accent;
 
     ctx.clearRect(0,0,W,H);
 
@@ -250,11 +323,11 @@
     const r = Math.min(W,H)/2 - 12;
     const thick = Math.max(10, Math.floor(r * 0.22));
 
-    // background ring
+    // background ring (slightly darker so the value ring stands out)
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.22;
     ctx.lineWidth = thick;
-    ctx.strokeStyle = '#000';
+    ctx.strokeStyle = 'rgba(30,24,40,.85)';
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI*2);
     ctx.stroke();
@@ -267,37 +340,42 @@
 
     // subtle glow
     ctx.save();
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.30;
     ctx.lineWidth = thick + 4;
-    ctx.strokeStyle = '#9b87ff';
+    ctx.strokeStyle = glow;
     ctx.beginPath();
     ctx.arc(cx, cy, r, start, end);
     ctx.stroke();
     ctx.restore();
 
     ctx.save();
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.95;
     ctx.lineWidth = thick;
-    ctx.strokeStyle = '#b8abff';
+    ctx.strokeStyle = ring;
     ctx.beginPath();
     ctx.arc(cx, cy, r, start, end);
     ctx.stroke();
     ctx.restore();
 
-    // center text (minimal)
-    // NOTE: use darker ink so it stays readable on the pastel glass UI
+    // center text (high-contrast)
     ctx.save();
-    ctx.fillStyle = 'rgba(58,49,66,0.92)';
-    ctx.font = '800 22px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    ctx.fillStyle = 'rgba(40,32,60,0.98)';
+    ctx.shadowColor = 'rgba(255,255,255,.65)';
+    ctx.shadowBlur = 6;
+    ctx.font = '900 26px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${Math.round(v*100)}%`, cx, cy - 6);
 
-    ctx.globalAlpha = 0.86;
-    ctx.fillStyle = 'rgba(58,49,66,0.78)';
-    ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-    if (labelTop) ctx.fillText(labelTop, cx, cy + 18);
-    if (labelBottom) ctx.fillText(labelBottom, cx, cy + 34);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(50,42,80,0.92)';
+    ctx.font = '700 12px system-ui, -apple-system, Segoe UI, sans-serif';
+    if (labelTop) ctx.fillText(labelTop, cx, cy + 20);
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = 'rgba(70,62,110,0.80)';
+    ctx.font = '600 12px system-ui, -apple-system, Segoe UI, sans-serif';
+    if (labelBottom) ctx.fillText(labelBottom, cx, cy + 38);
     ctx.restore();
   }
 
@@ -2063,11 +2141,210 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     if (re) setRing(re, explore);
   }
 
+  // -----------------------------
+  // Bias UX: explanations + readability
+  // - Add a small “how to read” card under the charts (no HTML edits needed)
+  // - Inject minimal CSS to improve label contrast
+  // -----------------------------
+  function ensureBiasExplain() {
+    // CSS (once)
+    if (!document.getElementById('cansee-bias-ux')) {
+      const st = document.createElement('style');
+      st.id = 'cansee-bias-ux';
+      st.textContent = `
+        .hb-chartCard .hb-mini{color:rgba(40,32,60,.92)!important;font-weight:650;letter-spacing:.01em}
+        .hb-chart{filter:drop-shadow(0 10px 18px rgba(90,70,120,.12))}
+        .hb-biasExplainCard{margin-top:14px}
+        .hb-biasExplainGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+        @media (max-width: 980px){.hb-biasExplainGrid{grid-template-columns:1fr}}
+        .hb-biasExplainItem{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.58);border:1px solid rgba(180,140,220,.20)}
+        .hb-biasExplainItem b{color:rgba(40,32,60,.96)}
+        .hb-biasExplainItem .hb-mini{margin-top:6px;color:rgba(60,50,90,.86)}
+        .hb-biasExplainMeta{margin-top:10px;color:rgba(60,50,90,.78)}
+
+        /* Legend + tooltip */
+        .hb-biasLegend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
+        .hb-biasKey{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.55);border:1px solid rgba(180,140,220,.18)}
+        .hb-biasSw{width:12px;height:12px;border-radius:999px;box-shadow:0 0 0 3px rgba(255,255,255,.7)}
+        .hb-biasLegendNote{opacity:.85}
+        #biasTip{position:fixed;z-index:999999;pointer-events:none;max-width:320px;
+          padding:10px 12px;border-radius:14px;
+          background:rgba(255,255,255,.92);
+          border:1px solid rgba(180,140,220,.22);
+          box-shadow:0 16px 34px rgba(70,40,120,.16);
+          transform:translate3d(0,0,0);
+          display:none;
+        }
+        #biasTip .t{font-weight:850;color:rgba(35,28,55,.98);letter-spacing:.01em}
+        #biasTip .m{margin-top:4px;color:rgba(55,45,85,.88);font-weight:650}
+        #biasTip .s{margin-top:6px;color:rgba(70,60,110,.78);font-size:12px;line-height:1.35}
+      `;
+      document.head.appendChild(st);
+    }
+
+    // Card (once)
+    const biasView = document.querySelector('.hb-view[data-view="bias"]');
+    if (!biasView) return;
+    if (biasView.querySelector('#biasExplainCard')) return;
+
+    const anchor = biasView.querySelector('.hb-biasGrid');
+    if (!anchor) return;
+
+    const card = document.createElement('div');
+    card.className = 'hb-card hb-card--wide hb-biasExplainCard';
+    card.id = 'biasExplainCard';
+    card.innerHTML = `
+      <div class="hb-card__hd">HOW TO READ（見方）</div>
+      <div class="hb-biasExplainGrid">
+        <div class="hb-biasExplainItem">
+          <b>FOCUS</b>
+          <div class="hb-mini">タイムラインが「1つの話題」に寄っている度合い（top/topicの比率）。高いほど同ジャンル集中。</div>
+        </div>
+        <div class="hb-biasExplainItem">
+          <b>VARIETY</b>
+          <div class="hb-mini">話題の散らばり（エントロピー）。高いほど、複数ジャンルがバランス良く混ざる。</div>
+        </div>
+        <div class="hb-biasExplainItem">
+          <b>EXPLORE</b>
+          <div class="hb-mini">触れている話題の種類数（unique/topics）。高いほど新しい視点に出会えている。</div>
+        </div>
+      </div>
+      <div class="hb-mini hb-biasExplainMeta" id="biasExplainMeta">--</div>
+      <div class="hb-biasLegend" id="biasLegend"></div>
+    `;
+
+    // Insert right after the chart grid
+    anchor.insertAdjacentElement('afterend', card);
+
+    // Tooltip root (once)
+    if (!document.getElementById('biasTip')) {
+      const tip = document.createElement('div');
+      tip.id = 'biasTip';
+      tip.innerHTML = `<div class="t" id="biasTipT">--</div><div class="m" id="biasTipM">--</div><div class="s" id="biasTipS">--</div>`;
+      document.body.appendChild(tip);
+    }
+  }
+
+  function getBiasPalette() {
+    const rs = getComputedStyle(document.documentElement);
+    const accent = (rs.getPropertyValue('--accent') || '#9b87ff').trim();
+    const accent2 = (rs.getPropertyValue('--accent2') || '#c3b8ff').trim();
+    // A soft, yume-kawaii cyan for Explore (keeps contrast on white glass)
+    const explore = '#7fd6ff';
+    return {
+      focus: { ring: accent, glow: accent },
+      variety: { ring: accent2, glow: accent2 },
+      explore: { ring: explore, glow: explore },
+    };
+  }
+
+  function ensureBiasLegendAndTooltip() {
+    const legend = document.getElementById('biasLegend');
+    if (!legend) return;
+
+    // Build legend
+    const pal = getBiasPalette();
+    if (!legend.dataset.ready) {
+      legend.dataset.ready = '1';
+      legend.innerHTML = `
+        <span class="hb-biasKey"><span class="hb-biasSw" style="background:${pal.focus.ring}"></span><b>FOCUS</b></span>
+        <span class="hb-biasKey"><span class="hb-biasSw" style="background:${pal.variety.ring}"></span><b>VARIETY</b></span>
+        <span class="hb-biasKey"><span class="hb-biasSw" style="background:${pal.explore.ring}"></span><b>EXPLORE</b></span>
+        <span class="hb-mini hb-biasLegendNote">（色のリング＝値 / グレー＝残り）</span>
+      `;
+    } else {
+      // Update colors when character changes
+      const sw = legend.querySelectorAll('.hb-biasSw');
+      if (sw[0]) sw[0].style.background = pal.focus.ring;
+      if (sw[1]) sw[1].style.background = pal.variety.ring;
+      if (sw[2]) sw[2].style.background = pal.explore.ring;
+    }
+
+    if (app.biasTipBound) return;
+    app.biasTipBound = true;
+
+    const tip = document.getElementById('biasTip');
+    const tipT = document.getElementById('biasTipT');
+    const tipM = document.getElementById('biasTipM');
+    const tipS = document.getElementById('biasTipS');
+    if (!tip || !tipT || !tipM || !tipS) return;
+
+    const meaning = {
+      focus: '同ジャンルへの集中度（top話題の比率）',
+      variety: '話題の散らばり（エントロピー）',
+      explore: '触れている話題の種類数（unique）',
+    };
+
+    function show(metric, e) {
+      const m = app.biasMetricsLast;
+      if (!m) return;
+      const pct = Math.round((m[metric] || 0) * 100);
+      tip.style.display = 'block';
+      tipT.textContent = `${metric.toUpperCase()}  ${pct}%`;
+      tipM.textContent = meaning[metric] || '';
+
+      const period = (app.period || 'week').toUpperCase();
+      const lines = [];
+      if (metric === 'focus') {
+        lines.push(`top: ${m.topKey || '--'}`);
+        lines.push(`posts: ${m.total ?? 0}`);
+      } else if (metric === 'variety') {
+        lines.push(`topics: ${m.eff ?? 0}/${m.nTotalTopics ?? 0}`);
+        lines.push(`entropy: ${(m.entropy ?? 0).toFixed ? (m.entropy || 0).toFixed(2) : (m.entropy ?? '--')}`);
+      } else if (metric === 'explore') {
+        lines.push(`unique: ${m.eff ?? 0}`);
+        lines.push(`scope: ${m.scope ?? '--'}`);
+      }
+      tipS.textContent = `期間: ${period} / ${lines.join('  |  ')}`;
+
+      // position
+      const pad = 14;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const r = tip.getBoundingClientRect();
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      if (x + r.width + 8 > vw) x = Math.max(8, vw - r.width - 8);
+      if (y + r.height + 8 > vh) y = Math.max(8, vh - r.height - 8);
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    }
+
+    function hide() {
+      tip.style.display = 'none';
+    }
+
+    const canvases = [
+      { el: dom.cFocus, metric: 'focus' },
+      { el: dom.cVar, metric: 'variety' },
+      { el: dom.cExp, metric: 'explore' },
+    ];
+
+    canvases.forEach(({el, metric}) => {
+      if (!el) return;
+      el.style.cursor = 'help';
+      el.addEventListener('mousemove', (e) => show(metric, e));
+      el.addEventListener('mouseenter', (e) => show(metric, e));
+      el.addEventListener('mouseleave', hide);
+    });
+    window.addEventListener('scroll', hide, { passive: true });
+    window.addEventListener('blur', hide);
+  }
+
   function renderBias() {
+    ensureBiasExplain();
+    ensureBiasLegendAndTooltip();
     const biasAgg = app.data.biasAgg;
     const period = app.period;
     const agg = aggBiasByPeriod(biasAgg, period);
     const m = calcBiasMetrics(agg);
+    app.biasMetricsLast = m;
+
+    // explanation meta (under the charts)
+    const meta = document.getElementById('biasExplainMeta');
+    if (meta) {
+      const pLabel = (period || 'week').toUpperCase();
+      meta.textContent = `期間: ${pLabel} / posts: ${m.total} / top: ${m.topKey || '--'}（数が少ない日は%が揺れやすい）`;
+    }
 
     // update note
     if (dom.periodNote) {
@@ -2078,9 +2355,10 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
     const prev = app.chartLast;
     const next = { focus: m.focus, variety: m.variety, explore: m.explore };
 
-    tween(prev.focus, next.focus, 420, v => drawRingPie(dom.cFocus, v, m.topKey ? `top: ${m.topKey}` : 'top: --', `posts: ${m.total}`));
-    tween(prev.variety, next.variety, 420, v => drawRingPie(dom.cVar, v, `topics: ${m.eff}/${m.nTotalTopics}`, `entropy`));
-    tween(prev.explore, next.explore, 420, v => drawRingPie(dom.cExp, v, `unique: ${m.eff}`, `scope`));
+    const pal = getBiasPalette();
+    tween(prev.focus, next.focus, 420, v => drawRingPie(dom.cFocus, v, m.topKey ? `top: ${m.topKey}` : 'top: --', `posts: ${m.total}`, pal.focus));
+    tween(prev.variety, next.variety, 420, v => drawRingPie(dom.cVar, v, `topics: ${m.eff}/${m.nTotalTopics}`, `entropy`, pal.variety));
+    tween(prev.explore, next.explore, 420, v => drawRingPie(dom.cExp, v, `unique: ${m.eff}`, `scope`, pal.explore));
 
     app.chartLast = next;
 
@@ -2184,6 +2462,7 @@ backend: { state: 'unavailable', session: '--', latency: '--' },
 function bootPet() {
     const cvMain = document.getElementById('petCanvas');
     const cvSub  = document.getElementById('petCanvasSub');
+    const cvRpg  = document.getElementById('petCanvasRpg');
 
     const setNext = (t) => {
       const el = document.getElementById('nextText');
@@ -2204,6 +2483,13 @@ function bootPet() {
     };
 
     if (!cvMain) return;
+
+    // DPR normalize (avoid blur / mis-sized canvases)
+    try { normalizeCanvas(cvMain); } catch (_) {}
+    try { if (cvSub) normalizeCanvas(cvSub); } catch (_) {}
+    // GAME canvas is often hidden on initial load (tab UI).
+    // Normalizing while hidden would shrink it to ~1px, so we defer until visible.
+    try { if (cvRpg && isCanvasVisible(cvRpg)) normalizeCanvas(cvRpg); } catch (_) {}
 
     const PetEngine = window.PetEngine;
     if (!PetEngine) {
@@ -2229,11 +2515,14 @@ function bootPet() {
     try {
       P.engineMain = new PetEngine({ canvas: cvMain, debug: false, pixelSize: 1 });
       if (cvSub) P.engineSub = new PetEngine({ canvas: cvSub, debug: false, pixelSize: 1 });
+      // GAME preview canvas (battle pass screen)
+      if (cvRpg) P.engineRpg = new PetEngine({ canvas: cvRpg, debug: false, pixelSize: 1 });
     } catch (e) {
       console.warn('[HB] PetEngine ctor failed', e);
       setNext('PetEngine: init failed');
       drawFallback(cvMain, 'NO PET');
       drawFallback(cvSub, 'NO PET');
+      drawFallback(cvRpg, 'NO PET');
       return;
     }
 
@@ -2342,6 +2631,19 @@ function bootPet() {
         });
         if (P.engineSub) {
           P.engineSub.renderPet({
+            char: P.char,
+            eyesVariant: eyes,
+            mouthVariant: mouth,
+            extraVariant: 'default',
+            accessories: P.accessories || undefined,
+            equip: { head: headId, fx: fxId }
+          });
+        }
+        // GAME canvas: draw only when visible
+        if (P.engineRpg && cvRpg && isCanvasVisible(cvRpg)) {
+          // Ensure proper DPR sizing when the tab becomes visible.
+          try { normalizeCanvas(cvRpg); } catch (_) {}
+          P.engineRpg.renderPet({
             char: P.char,
             eyesVariant: eyes,
             mouthVariant: mouth,
@@ -3897,6 +4199,9 @@ if (dom.selHead || dom.selFx) {
     // refresh period buttons list (dom is const object but properties can be updated)
     dom.periodBtns = $$('.hb-seg__btn[data-period]');
 
+    // Canvas visuals (frames) + DPR normalization
+    ensureCanvasFrameStyle();
+
     bindNav();
     bindGlanceAndHelp();
     bindTutorialButtons();
@@ -3937,6 +4242,16 @@ if (dom.selHead || dom.selFx) {
 
     // Apply character theme to the whole Options UI
     applyCharacterTheme(app.data.characterId);
+
+    // Mark canvases for styling + normalize once (and on resize)
+    [dom.cFocus, dom.cVar, dom.cExp, dom.tierPreviewCanvas].forEach((cv) => {
+      if (cv && cv.classList) cv.classList.add('cansee-cv');
+    });
+    normalizeAllCanvases(document);
+    window.addEventListener('resize', () => normalizeAllCanvases(document), { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) normalizeAllCanvases(document);
+    });
 
     // Boot PetEngine AFTER we know the selected character (fix: Options always fell back to follone on load)
     bootPet();

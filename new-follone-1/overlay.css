@@ -83,8 +83,19 @@
   border-radius: 20px;
   background: linear-gradient(180deg, var(--ui-body-0), var(--ui-body-1));
   box-shadow: var(--shadow-outer);
-  border: 1px solid rgba(42,39,35,0.10);
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 18%, transparent);
   overflow: hidden;
+}
+
+/* yume-kawa dot frame (subtle) */
+#follone-widget .deviceBody::before{
+  content:"";
+  position:absolute;
+  inset: 9px;
+  border-radius: 14px;
+  pointer-events:none;
+  border: 1px dotted color-mix(in srgb, var(--ui-accent) 28%, transparent);
+  opacity: 0.85;
 }
 
 /* Inset screen area (embedded) */
@@ -94,9 +105,23 @@
   border-radius: 18px;
   margin: 10px;
   background: rgba(255,255,255,0.48);
-  border: 1px solid rgba(42,39,35,0.10);
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 20%, transparent);
   box-shadow: var(--shadow-inset-1), var(--shadow-inset-2);
   backdrop-filter: blur(6px);
+}
+
+#follone-widget .deviceInset::after{
+  /* pastel pixel dots on the edge */
+  content:"";
+  position:absolute;
+  inset: 0;
+  border-radius: 18px;
+  pointer-events:none;
+  opacity: 0.10;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ui-accent) 55%, transparent) 1px, transparent 2px);
+  background-size: 12px 12px;
+  mask: linear-gradient(#000,#000);
 }
 
 /* Glass layer (CRT) */
@@ -150,7 +175,29 @@
 }
 
 #follone-widget .petWrap{ position: relative; }
+
+/* gentle floating (alive / fluffy) */
+@keyframes cansee-floaty{
+  0%{ transform: translate3d(0,0,0); }
+  50%{ transform: translate3d(0,-3px,0); }
+  100%{ transform: translate3d(0,0,0); }
+}
+
+@keyframes cansee-sway{
+  0%{ transform: rotate(-0.35deg); }
+  50%{ transform: rotate(0.35deg); }
+  100%{ transform: rotate(-0.35deg); }
+}
+
+#follone-widget .petWrap{
+  animation: cansee-floaty 3.8s ease-in-out infinite;
+  will-change: transform;
+}
+
 #follone-widget .avatar{
+  /* tiny extra sway for the avatar window itself */
+  animation: cansee-sway 6.2s ease-in-out infinite;
+  transform-origin: 50% 70%;
   width: 88px;
   height: 88px;
   border-radius: 18px;
@@ -365,16 +412,13 @@
   position: relative;
 }
 
-/* yume-kawa substrate (no dot-matrix / no CRT) */
+/* dot-matrix substrate */
 #follone-widget #follone-taskbar.ticker::before{
   content:"";
   position:absolute; inset:0;
-  background:
-    radial-gradient(220px 120px at 18% 18%, rgba(255,255,255,0.65), transparent 70%),
-    radial-gradient(240px 140px at 78% 10%, rgba(255,255,255,0.55), transparent 72%),
-    radial-gradient(200px 120px at 40% 90%, rgba(123,97,255,0.12), transparent 72%),
-    radial-gradient(240px 140px at 88% 78%, rgba(253,107,152,0.12), transparent 74%);
-  opacity: 0.85;
+  background: radial-gradient(rgba(42,39,35,0.10) 1px, transparent 1px);
+  background-size: 4px 4px;
+  opacity: 0.55;
   pointer-events:none;
 }
 
@@ -412,10 +456,10 @@
   color: rgba(42,39,35,0.70);
 }
 
-/* glitch pulse (soft) */
-#follone-widget #follone-taskbar.glitch::before{ opacity: 0.95; filter: saturate(1.02); }
+/* glitch pulse (noise->settle) */
+#follone-widget #follone-taskbar.glitch::before{ opacity: 0.75; filter: contrast(1.2); }
 #follone-widget #follone-taskbar.glitch .tickerTop,
-#follone-widget #follone-taskbar.glitch .tickerBot{ filter: blur(0.12px); transform: translateY(0.1px); }
+#follone-widget #follone-taskbar.glitch .tickerBot{ filter: blur(0.25px); transform: translateY(0.1px); }
 
 /* ---- Actions ---- */
 #follone-widget .actions{ margin-top: 10px; }
@@ -451,15 +495,19 @@
   position: relative;
 }
 
-/* Soft hint for XP track (no block grid) */
+/* Empty blocks for XP */
 #follone-widget .xpBarWrap::before{
   content:"";
   position:absolute;
   inset: 1px;
   border-radius: 6px;
   background:
-    linear-gradient(90deg, rgba(255,255,255,0.55), rgba(255,255,255,0.12));
-  opacity: 0.22;
+    repeating-linear-gradient(90deg,
+      rgba(42,39,35,0.18) 0px,
+      rgba(42,39,35,0.18) 9px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0) 12px);
+  opacity: 0.18;
   pointer-events:none;
 }
 
@@ -468,16 +516,27 @@
   width:0%;
   position: relative;
   background:
-    radial-gradient(220px 20px at 10% 50%, rgba(255,255,255,0.45), transparent 70%),
+    /* block mask */
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 9px,
+      rgba(0,0,0,0.18) 9px,
+      rgba(0,0,0,0.18) 12px),
+    /* diagonal stripe fill */
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.22) 0px,
+      rgba(255,255,255,0.22) 6px,
+      rgba(0,0,0,0) 6px,
+      rgba(0,0,0,0) 12px),
     linear-gradient(90deg, var(--ui-accent-soft), var(--ui-accent));
-  animation: folloneGlowSweep 1.4s var(--ease-out) infinite;
+  background-size: 12px 100%, 24px 24px, auto;
+  animation: folloneStripe 1.2s linear infinite;
   transition: width var(--t-mid) var(--ease-out);
 }
 
-@keyframes folloneGlowSweep{
-  0%{ filter: brightness(1.00); }
-  50%{ filter: brightness(1.07); }
-  100%{ filter: brightness(1.00); }
+@keyframes folloneStripe{
+  from{ background-position: 0 0, 0 0, 0 0; }
+  to{ background-position: 0 0, 24px 24px, 0 0; }
 }
 
 /* Boot sequence for XP line */
